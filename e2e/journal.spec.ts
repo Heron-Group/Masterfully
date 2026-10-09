@@ -7,9 +7,15 @@ import { editorText, setEditorText, signIn } from "./helpers";
 const scroller = (page: Page) => page.getByLabel("Journal entries");
 const composer = (page: Page) => page.getByRole("textbox", { name: "New journal entry" });
 
+/** Cmd/Ctrl+Enter on desktop; tap Post on phones (no such shortcut there). */
+async function submit(page: Page) {
+  if (test.info().project.name === "desktop") await page.keyboard.press("ControlOrMeta+Enter");
+  else await page.getByRole("button", { name: "Post" }).click();
+}
+
 async function postEntry(page: Page, text: string) {
   await setEditorText(page, composer(page), text);
-  await page.keyboard.press("ControlOrMeta+Enter");
+  await submit(page);
   await expect(page.locator("article", { hasText: text })).toBeVisible();
 }
 
@@ -74,7 +80,7 @@ test("posting with Cmd/Ctrl+Enter adds the entry at the bottom and clears the co
   await signIn(page);
   const text = `E2E post ${Date.now()}`;
   await setEditorText(page, composer(page), `${text}\nsecond line`);
-  await page.keyboard.press("ControlOrMeta+Enter");
+  await submit(page);
   const article = page.locator("article", { hasText: text });
   await expect(article).toBeVisible();
   await expect.poll(() => editorText(composer(page))).toBe("");
