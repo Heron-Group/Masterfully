@@ -37,3 +37,40 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 }
+
+export type SourceType = "book" | "chapter" | "article" | "report" | "web" | "thesis" | "other";
+export const SOURCE_TYPE_OPTIONS: { value: SourceType; label: string }[] = [
+  { value: "book", label: "Book" },
+  { value: "chapter", label: "Chapter" },
+  { value: "article", label: "Article" },
+  { value: "report", label: "Report" },
+  { value: "web", label: "Web page" },
+  { value: "thesis", label: "Thesis" },
+  { value: "other", label: "Other" },
+];
+
+export type AiSummaryDto = { text: string; generated?: string; model?: string };
+
+export type SourceDto = {
+  id: string;
+  title: string;
+  authors: string[];
+  year?: number;
+  type: SourceType;
+  url?: string;
+  pdf?: { url: string; downloadUrl: string; name: string };
+  added: string;
+  updated: string;
+  notes: string;
+  aiSummary: AiSummaryDto | null;
+  problem?: string;
+  /** Groups this source belongs to. */
+  groups: { id: string; title: string }[];
+};
+
+export type GroupRefDto = { id: string; title: string };
+
+export function formatAuthors(authors: string[]): string {
+  if (authors.length <= 3) return authors.join("; ");
+  return `${authors.slice(0, 3).join("; ")} et al.`;
+}

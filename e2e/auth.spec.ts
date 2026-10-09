@@ -17,7 +17,7 @@ test("a wrong password shows an error", async ({ page }) => {
 test("signing in returns to the requested page, signing out ends the session", async ({ page }) => {
   await signIn(page, "/library");
   await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
-  await expect(page.getByText("Journal entries")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Add source" })).toBeVisible();
   expect((await page.request.get("/api/sync")).status()).toBe(200);
 
   await page.goto("/settings");

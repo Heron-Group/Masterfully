@@ -115,3 +115,40 @@ export function field(upload: ParsedUpload, name: string): string | undefined {
 export function fieldList(upload: ParsedUpload, name: string): string[] {
   return upload.fields.get(name) ?? [];
 }
+
+/** Check a staged file really is a PDF (by its first bytes, not just its name). */
+export async function assertPdf(f: StagedFile): Promise<void> {
+  const handle = await fs.open(f.tempPath, "r");
+  try {
+    const head = Buffer.alloc(1024);
+    const { bytesRead } = await handle.read(head, 0, 1024, 0);
+    if (!head.subarray(0, bytesRead).includes("%PDF-")) {
+      throw new ContentError(`"${f.name}" doesn't look like a PDF`, 400);
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Parse the source metadata fields shared by the add and edit forms. */
+export function sourceFields(get: (name: string) => string | undefined) {
+  const yearText = get("year")?.trim();
+  const year = yearText ? Number(yearText) : undefined;
+  if (yearText && (!Number.isInteger(year) || year! < 0 || year! > 3000)) {
+    throw new ContentError("Year should be a number like 2025", 400);
+  }
+  const url = get("url")?.trim() || undefined;
+  if (url && !/^https?:\/\//i.test(url)) {
+    throw new ContentError("The link should start with http:// or https://", 400);
+  }
+  return {
+    title: get("title")?.trim() ?? "",
+    authors: (get("authors") ?? "")
+      .split(/\r?\n/)
+      .map((a) => a.trim())
+      .filter(Boolean),
+    year,
+    type: get("type") as never,
+    url,
+  };
+}

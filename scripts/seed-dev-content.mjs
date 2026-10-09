@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Development only: fill ./.dev-content (or CONTENT_DIR) with sample journal
 // entries spread over several weeks, then commit them in the content repo.
-// Usage: node scripts/seed-dev-content.mjs [count]
+// Usage: node scripts/seed-dev-content.mjs [count] [--library]
+//   --library also adds a few sample sources and a reading group.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -11,7 +12,8 @@ if (!existsSync(path.join(dir, ".git"))) {
   console.error(`${dir} is not an initialised content repo. Start the app once first.`);
   process.exit(1);
 }
-const count = Number(process.argv[2] ?? 160);
+const count = Number(process.argv.slice(2).find((a) => /^\d+$/.test(a)) ?? 160);
+const withLibrary = process.argv.includes("--library");
 const lines = [
   "Studio day. Tried the **folded paper** prototype again; the hinge still tears after a dozen openings.",
   "Reading notes on co-design as *infrastructuring*: the work continues after the workshop ends.",
@@ -33,6 +35,26 @@ for (let i = 0; i < count; i++) {
   const body = `${lines[i % lines.length]}\n\n_Sample entry ${i + 1} of ${count}._`;
   writeFileSync(path.join(sub, `${id}.md`), `---\nid: ${id}\ncreated: ${iso}\nupdated: ${iso}\n---\n${body}\n`);
 }
+if (withLibrary) {
+  const sources = [
+    ["sanders-2008-co-creation-new", "Co-creation and the new landscapes of design", ["Sanders, Elizabeth B.-N.", "Stappers, Pieter Jan"], 2008, "article", "https://doi.org/10.1080/15710880701875068", "Distinguishes co-creation from co-design.\n\n- Useful framing of **who** designs\n- Map of design research approaches"],
+    ["ehn-2008-participation-design-things", "Participation in design things", ["Ehn, Pelle"], 2008, "chapter", "", "Design *Things* as socio-material assemblies. Connects to infrastructuring."],
+    ["schon-1983-reflective-practitioner", "The Reflective Practitioner: How Professionals Think in Action", ["Schön, Donald A."], 1983, "book", "", "Reflection-in-action; the conversation with the materials of a situation."],
+    ["ingold-2013-making", "Making: Anthropology, Archaeology, Art and Architecture", ["Ingold, Tim"], 2013, "book", "", ""],
+  ];
+  mkdirSync(path.join(dir, "sources"), { recursive: true });
+  mkdirSync(path.join(dir, "groups"), { recursive: true });
+  const added = new Date(now - 20 * 24 * 3600 * 1000);
+  sources.forEach(([id, title, authors, year, type, url, notes], i) => {
+    const iso = new Date(added.getTime() + i * 86400000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const fm = [`id: ${id}`, `title: ${JSON.stringify(title)}`, `authors: [ ${authors.map((a) => JSON.stringify(a)).join(", ")} ]`, `year: ${year}`, `type: ${type}`, url ? `url: ${url}` : "", `added: ${iso}`, `updated: ${iso}`].filter(Boolean).join("\n");
+    writeFileSync(path.join(dir, "sources", `${id}.md`), `---\n${fm}\n---\n## Notes\n\n${notes}\n`);
+  });
+  writeFileSync(
+    path.join(dir, "groups", "co-design-foundations.md"),
+    `---\nid: co-design-foundations\ntitle: "Co-design foundations"\ncreated: ${added.toISOString().replace(/\.\d{3}Z$/, "Z")}\nupdated: ${added.toISOString().replace(/\.\d{3}Z$/, "Z")}\nsources:\n  - id: sanders-2008-co-creation-new\n    note: "The vocabulary I keep returning to"\n  - id: ehn-2008-participation-design-things\n    note: "Infrastructuring and design Things"\n  - id: schon-1983-reflective-practitioner\n---\n## Overview\n\nFoundational texts on participation and co-design that frame the methods chapter.\n`,
+  );
+}
 execFileSync("git", ["add", "-A"], { cwd: dir });
-execFileSync("git", ["-c", "user.name=Seed", "-c", "user.email=seed@localhost", "commit", "-q", "-m", `dev: seed ${count} sample journal entries`], { cwd: dir });
-console.log(`Seeded ${count} journal entries in ${dir}`);
+execFileSync("git", ["-c", "user.name=Seed", "-c", "user.email=seed@localhost", "commit", "-q", "-m", `dev: seed ${count} sample journal entries${withLibrary ? " and a sample library" : ""}`], { cwd: dir });
+console.log(`Seeded ${count} journal entries${withLibrary ? " and a sample library" : ""} in ${dir}`);
