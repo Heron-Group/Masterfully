@@ -126,6 +126,9 @@ export class GitSync {
     // Files that were already in the folder (or edited while the app was
     // down) are committed so nothing sits outside version control.
     await this.exclusive(() => this.commitOutsideChanges());
+    // Push anything left unpushed when the app last stopped (for example if
+    // Passenger shut it down before the debounced push ran).
+    if (remote) this.schedulePush();
   }
 
   /**

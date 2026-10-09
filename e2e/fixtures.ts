@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export const CONTENT_DIR = path.resolve(process.env.E2E_CONTENT_DIR ?? ".dev-content");
@@ -41,10 +42,20 @@ export function handWrite(rel: string, text: string) {
 /** Remove a hand-written file and commit, leaving the content repo clean. */
 export function handRemove(rel: string) {
   rmSync(path.join(CONTENT_DIR, rel), { force: true });
-  git("add", "-A", "--", rel);
   try {
+    git("rm", "-q", "--cached", "--ignore-unmatch", "--", rel);
     git("-c", "user.name=E2E", "-c", "user.email=e2e@localhost", "commit", "-q", "-m", `e2e: remove ${rel}`);
   } catch {
     // Nothing to commit (the file was never committed).
   }
+}
+
+/**
+ * Write a test PDF to disk. Passing a path (not a buffer) lets Playwright
+ * stream it to the browser; a 40 MB buffer can exhaust memory in WebKit.
+ */
+export function pdfFile(bytes: number, text: string): string {
+  const file = path.join(os.tmpdir(), `e2e-${process.pid}-${bytes}.pdf`);
+  writeFileSync(file, makePdf(bytes, text));
+  return file;
 }

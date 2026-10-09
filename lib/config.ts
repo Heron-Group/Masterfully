@@ -7,6 +7,11 @@ export function serverConfig() {
   const production = env.NODE_ENV === "production";
   const contentDir = env.CONTENT_DIR?.trim() || (production ? "" : ".dev-content");
   if (!contentDir) throw new Error("CONTENT_DIR must be set in production");
+  // The standalone server changes into its own folder, so relative paths
+  // would point inside the build output.
+  if (production && !path.isAbsolute(contentDir)) {
+    throw new Error(`CONTENT_DIR must be an absolute path in production (got "${contentDir}")`);
+  }
 
   return {
     production,

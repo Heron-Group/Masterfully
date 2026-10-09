@@ -18,6 +18,7 @@ export const metadata: Metadata = {
   title: { default: "Research", template: "%s · Research" },
   description: "Research journal and reading list",
   robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: "Research", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

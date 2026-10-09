@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { git, handRemove, handWrite, makePdf } from "./fixtures";
+import { git, handRemove, handWrite, pdfFile } from "./fixtures";
 import { signIn } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
@@ -39,11 +39,7 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   await page.getByLabel("Year", { exact: true }).fill("2025");
   await page.getByLabel("Type", { exact: true }).selectOption("article");
   await page.getByLabel("Link", { exact: true }).fill("https://example.org/paper");
-  await page.locator('input[type="file"]').setInputFiles({
-    name: "paper.pdf",
-    mimeType: "application/pdf",
-    buffer: makePdf(40 * 1024 * 1024, `Forty megabytes ${stamp}`),
-  });
+  await page.locator('input[type="file"]').setInputFiles(pdfFile(40 * 1024 * 1024, `Forty megabytes ${stamp}`));
   await page.getByPlaceholder(/Your notes/).fill("First **impressions**.");
   await page.getByLabel(`E2E Group ${stamp}`).check();
   await page.getByRole("button", { name: "Add source" }).click();

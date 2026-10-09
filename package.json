@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "build": "next build && node scripts/postbuild.mjs",
+    "start": "node server.js",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "hash-password": "node scripts/hash-password.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "seed-dev": "node scripts/seed-dev-content.mjs 160 --library"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
@@ -49,5 +50,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=20.9"
   }
 }
