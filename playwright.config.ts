@@ -10,6 +10,8 @@ export default defineConfig({
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
     { name: "mobile", use: { ...devices["iPhone 15"], defaultBrowserType: "chromium" } },
+    // Safari's engine with an iPhone viewport (run: npx playwright install webkit).
+    { name: "mobile-safari", use: { ...devices["iPhone 15"] } },
   ],
   webServer: {
     command: `npx next dev -p ${PORT}`,

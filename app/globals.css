@@ -74,3 +74,69 @@ body {
   outline-offset: 2px;
   border-radius: 2px;
 }
+
+/* --- Rendered Markdown ------------------------------------------------------ */
+
+.prose-rp {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.prose-rp > :first-child { margin-top: 0; }
+.prose-rp > :last-child { margin-bottom: 0; }
+.prose-rp p, .prose-rp ul, .prose-rp ol, .prose-rp blockquote, .prose-rp pre, .prose-rp table {
+  margin: 0.7em 0;
+}
+.prose-rp h1, .prose-rp h2, .prose-rp h3, .prose-rp h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.3em 0 0.4em;
+  letter-spacing: -0.01em;
+}
+.prose-rp h1 { font-size: 1.35em; }
+.prose-rp h2 { font-size: 1.2em; }
+.prose-rp h3 { font-size: 1.08em; }
+.prose-rp h4 { font-size: 1em; }
+.prose-rp ul { list-style: disc; padding-left: 1.35em; }
+.prose-rp ol { list-style: decimal; padding-left: 1.5em; }
+.prose-rp li { margin: 0.2em 0; }
+.prose-rp li > ul, .prose-rp li > ol { margin: 0.2em 0; }
+.prose-rp ul.contains-task-list { list-style: none; padding-left: 0.2em; }
+.prose-rp input[type="checkbox"] { margin-right: 0.45em; accent-color: var(--accent); }
+.prose-rp a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.prose-rp blockquote {
+  border-left: 2px solid var(--rule);
+  padding-left: 1em;
+  color: var(--muted);
+  font-style: italic;
+}
+.prose-rp code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--accent-soft);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+}
+.prose-rp pre {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.5;
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 0.8em 1em;
+  overflow-x: auto;
+}
+.prose-rp pre code { background: none; padding: 0; font-size: inherit; }
+.prose-rp hr { border: 0; border-top: 1px solid var(--rule); margin: 1.5em 0; }
+.prose-rp img { max-width: 100%; border-radius: 4px; }
+.prose-rp table { border-collapse: collapse; font-family: var(--font-sans); font-size: 0.88em; display: block; overflow-x: auto; }
+.prose-rp th, .prose-rp td { border: 1px solid var(--rule); padding: 0.35em 0.6em; text-align: left; }
+.prose-rp th { font-weight: 600; }
+.prose-rp strong { font-weight: 600; }
