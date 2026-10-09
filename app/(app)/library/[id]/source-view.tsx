@@ -2,16 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { MarkdownEditor } from "@/components/markdown-editor";
+import { InlineSelect, InlineText, InlineTitle, PropertyRow, useInlineSave } from "@/components/inline-fields";
+import { LiveEditor } from "@/components/live-editor/live-editor";
 import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
 import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
-import { MAX_UPLOAD_BYTES, type GroupRefDto, type SourceDto } from "@/lib/dto";
+import { MAX_UPLOAD_BYTES, SOURCE_TYPE_OPTIONS, type GroupRefDto, type SourceDto, type SourceType } from "@/lib/dto";
 import { formatShortDate } from "@/lib/time";
 import { upload } from "@/lib/upload-client";
-import { deleteSource, removeSourcePdf, saveSourceNotes, setSourceInGroup, updateSourceDetails, type ActionResult } from "../actions";
-import { typeLabel } from "../library-view";
-import { SourceFields } from "../source-fields";
+import { deleteSource, removeSourcePdf, saveSourceNotes, setSourceInGroup, updateSourceProps, type ActionResult, type SourceProps } from "../actions";
 import { SourceSummaryPanel } from "./source-summary";
 
 function changed() {
@@ -21,7 +20,7 @@ function changed() {
 export function SourceView({ source, allGroups }: { source: SourceDto; allGroups: GroupRefDto[] }) {
   if (source.problem) {
     return (
-      <div className="mt-6 rounded-md border border-warn/40 bg-warn/10 px-4 py-3 text-sm">
+      <div className="mt-6 rounded-md bg-warn/10 px-4 py-3 text-sm">
         <p className="font-medium">This source&apos;s file can&apos;t be read.</p>
         <p className="mt-1 text-muted">
           The frontmatter in <code>sources/{source.id}.md</code> has an error ({source.problem}). Fix it in a text
@@ -51,71 +50,54 @@ function ErrorText({ result }: { result: ActionResult | null }) {
   );
 }
 
+/** Title and properties, edited in place like a Notion page. */
 function Details({ source }: { source: SourceDto }) {
-  const [editing, setEditing] = useState(false);
-  const [result, setResult] = useState<ActionResult | null>(null);
-  const [pending, start] = useTransition();
-
-  if (editing) {
-    return (
-      <form
-        className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const form = new FormData(e.currentTarget);
-          start(async () => {
-            const r = await updateSourceDetails(source.id, form);
-            setResult(r);
-            if (r.ok) {
-              changed();
-              setEditing(false);
-            }
-          });
-        }}
-      >
-        <SourceFields source={source} />
-        <ErrorText result={result} />
-        <div className="flex gap-2">
-          <button type="submit" disabled={pending} className={ui.btnPrimary}>
-            {pending ? "Saving…" : "Save details"}
-          </button>
-          <button type="button" onClick={() => setEditing(false)} className={ui.btnGhost}>
-            Cancel
-          </button>
-        </div>
-      </form>
-    );
-  }
+  const { save, label, isError } = useInlineSave();
+  const update = (props: SourceProps) =>
+    save(async () => {
+      const r = await updateSourceProps(source.id, props);
+      if (r.ok) changed();
+      return r;
+    });
 
   return (
     <header>
-      <h1 className="font-serif text-[1.9rem] leading-tight tracking-tight">{source.title}</h1>
-      <dl className="mt-3 space-y-1 text-[15px]">
-        {source.authors.length > 0 && (
-          <div>
-            <dt className="sr-only">Authors</dt>
-            <dd>{source.authors.join("; ")}</dd>
-          </div>
-        )}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted">
-          {source.year && <span className="tabular-nums">{source.year}</span>}
-          <span className={ui.badge}>{typeLabel(source.type)}</span>
-          <span className="text-xs text-faint">Added {formatShortDate(source.added)}</span>
-        </div>
-        {source.url && (
-          <div className="pt-1">
-            <dt className="sr-only">Link</dt>
-            <dd>
-              <a href={source.url} target="_blank" rel="noopener noreferrer" className="break-all text-accent underline decoration-1 underline-offset-2">
-                {source.url.replace(/^https?:\/\//, "")} ↗
+      <h1 className="sr-only">{source.title}</h1>
+      <InlineTitle value={source.title} onSave={(title) => void update({ title })} ariaLabel="Title" />
+      <div className="mt-4 space-y-0.5">
+        <PropertyRow label="Authors" htmlFor="prop-authors">
+          <InlineText
+            id="prop-authors"
+            multiline
+            value={source.authors.join("\n")}
+            onSave={(v) => void update({ authors: v.split(/\r?\n/) })}
+            placeholder="Surname, Firstname — one per line"
+            ariaLabel="Authors"
+          />
+        </PropertyRow>
+        <PropertyRow label="Year" htmlFor="prop-year">
+          <InlineText id="prop-year" value={source.year ? String(source.year) : ""} onSave={(year) => void update({ year })} inputMode="numeric" ariaLabel="Year" className="tabular-nums" />
+        </PropertyRow>
+        <PropertyRow label="Type" htmlFor="prop-type">
+          <InlineSelect<SourceType> id="prop-type" value={source.type} options={SOURCE_TYPE_OPTIONS} onSave={(type) => void update({ type })} ariaLabel="Type" />
+        </PropertyRow>
+        <PropertyRow label="Link" htmlFor="prop-url">
+          <div className="flex items-center gap-1">
+            <InlineText id="prop-url" value={source.url ?? ""} onSave={(url) => void update({ url })} inputMode="url" placeholder="https://" ariaLabel="Link" className="truncate text-accent" />
+            {source.url && (
+              <a href={source.url} target="_blank" rel="noopener noreferrer" title="Open link in a new tab" aria-label="Open link in a new tab" className="shrink-0 rounded px-1.5 text-muted hover:text-ink">
+                ↗
               </a>
-            </dd>
+            )}
           </div>
-        )}
-      </dl>
-      <button type="button" onClick={() => setEditing(true)} className={`${ui.btnGhost} -ml-2 mt-2`}>
-        Edit details
-      </button>
+        </PropertyRow>
+        <PropertyRow label="Added">
+          <span className="block px-0 py-0.5 text-muted">{formatShortDate(source.added)}</span>
+        </PropertyRow>
+      </div>
+      <p role={isError ? "alert" : "status"} className={`mt-1 h-4 text-xs ${isError ? "text-danger" : "text-faint"}`}>
+        {label}
+      </p>
     </header>
   );
 }
@@ -171,7 +153,7 @@ function PdfSection({ source }: { source: SourceDto }) {
       </h2>
       {source.pdf ? (
         <>
-          <div className="overflow-hidden rounded-lg border border-rule bg-surface">
+          <div className="overflow-hidden rounded-lg bg-surface ring-1 ring-rule/60">
             <iframe
               key={source.updated}
               src={source.pdf.url}
@@ -240,16 +222,21 @@ function NotesSection({ source }: { source: SourceDto }) {
   });
   return (
     <section aria-labelledby="notes-heading">
-      <h2 id="notes-heading" className={`${ui.h2} mb-3`}>
-        My notes
-      </h2>
-      <MarkdownEditor
+      <div className="mb-3 flex items-baseline gap-3">
+        <h2 id="notes-heading" className={ui.h2}>
+          My notes
+        </h2>
+        <span className="text-xs">
+          <SaveStatus state={state} error={error} onRetry={() => void flush()} />
+        </span>
+      </div>
+      <LiveEditor
         value={notes}
         onChange={setNotes}
-        placeholder="Notes in Markdown. Saved automatically."
-        minRows={6}
-        toolbar={<span className="text-xs"><SaveStatus state={state} error={error} onRetry={() => void flush()} /></span>}
-        textareaProps={{ "aria-label": "My notes", onBlur: () => void flush() }}
+        onBlur={() => void flush()}
+        placeholder="Write your notes…"
+        ariaLabel="My notes"
+        className="min-h-24"
       />
     </section>
   );
@@ -277,7 +264,7 @@ function GroupsSection({ source, allGroups }: { source: SourceDto; allGroups: Gr
       {source.groups.length ? (
         <ul className="mb-3 flex flex-wrap gap-2">
           {source.groups.map((g) => (
-            <li key={g.id} className="flex items-center rounded-full border border-rule bg-surface text-sm">
+            <li key={g.id} className="flex items-center rounded-full bg-accent-soft/70 text-sm">
               <a href={`/groups/${g.id}`} className="py-1 pl-3 pr-1 hover:underline">
                 {g.title}
               </a>
@@ -324,7 +311,7 @@ function DeleteSection({ source }: { source: SourceDto }) {
   return (
     <section className="border-t border-rule pt-6">
       {confirming ? (
-        <div role="alertdialog" aria-label="Delete source" className="rounded-md border border-danger/30 bg-danger/5 p-4 text-sm">
+        <div role="alertdialog" aria-label="Delete source" className="rounded-md bg-danger/5 p-4 text-sm">
           <p>
             Delete <strong>{source.title}</strong>
             {source.pdf ? " and its PDF" : ""}? It will also be removed from{" "}

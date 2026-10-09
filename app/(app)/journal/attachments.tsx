@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { fileUrl, formatBytes, IMAGE_TYPES, MAX_UPLOAD_BYTES, type AttachmentDto } from "@/lib/dto";
 
 /** Images as a thumbnail grid (tap to enlarge), other files as cards. */
-export function AttachmentList({ attachments }: { attachments: AttachmentDto[] }) {
+export function AttachmentList({
+  attachments,
+  onRemove,
+}: {
+  attachments: AttachmentDto[];
+  /** When given, each attachment shows a remove control (with a confirm step). */
+  onRemove?: (file: string) => void;
+}) {
   const [open, setOpen] = useState<AttachmentDto | null>(null);
   const images = attachments.filter((a) => a.isImage);
   const files = attachments.filter((a) => !a.isImage);
@@ -14,35 +21,66 @@ export function AttachmentList({ attachments }: { attachments: AttachmentDto[] }
       {images.length > 0 && (
         <div className={`grid gap-1.5 ${images.length === 1 ? "max-w-sm grid-cols-1" : "max-w-md grid-cols-2 sm:grid-cols-3"}`}>
           {images.map((a) => (
-            <button
-              key={a.file}
-              type="button"
-              onClick={() => setOpen(a)}
-              className="group relative block overflow-hidden rounded-md border border-rule bg-accent-soft"
-              aria-label={`Open ${a.name}`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element -- authenticated, server-thumbnailed */}
-              <img
-                src={a.thumbUrl ?? a.url}
-                alt={a.name}
-                loading="lazy"
-                className={`w-full object-cover transition-opacity group-hover:opacity-90 ${images.length === 1 ? "max-h-80" : "aspect-square"}`}
-              />
-            </button>
+            <div key={a.file} className="group/att relative">
+              <button
+                type="button"
+                onClick={() => setOpen(a)}
+                className="block w-full overflow-hidden rounded-md bg-accent-soft"
+                aria-label={`Open ${a.name}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- authenticated, server-thumbnailed */}
+                <img
+                  src={a.thumbUrl ?? a.url}
+                  alt={a.name}
+                  loading="lazy"
+                  className={`w-full object-cover transition-opacity group-hover/att:opacity-90 ${images.length === 1 ? "max-h-80" : "aspect-square"}`}
+                />
+              </button>
+              {onRemove && <RemoveControl name={a.name} onRemove={() => onRemove(a.file)} overlay />}
+            </div>
           ))}
         </div>
       )}
       {files.map((a) => (
-        <FileCard key={a.file} attachment={a} />
+        <div key={a.file} className="group/att relative max-w-md">
+          <FileCard attachment={a} />
+          {onRemove && <RemoveControl name={a.name} onRemove={() => onRemove(a.file)} />}
+        </div>
       ))}
       {open && <Lightbox attachment={open} onClose={() => setOpen(null)} />}
     </div>
   );
 }
 
+/** A small × that asks "Remove?" before removing an attachment. */
+function RemoveControl({ name, onRemove, overlay }: { name: string; onRemove: () => void; overlay?: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+  const position = overlay ? "right-1 top-1" : "right-10 top-1/2 -translate-y-1/2";
+  return confirming ? (
+    <span className={`absolute ${position} flex gap-1 rounded-md bg-surface/95 p-0.5 text-xs shadow-sm`}>
+      <button type="button" onClick={onRemove} className="rounded bg-danger px-2 py-0.5 font-medium text-paper">
+        Remove
+      </button>
+      <button type="button" onClick={() => setConfirming(false)} className="rounded px-1.5 py-0.5 text-muted hover:text-ink">
+        Keep
+      </button>
+    </span>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      aria-label={`Remove ${name}`}
+      title="Remove attachment"
+      className={`absolute ${position} rounded-full bg-surface/90 px-1.5 text-sm leading-5 text-muted opacity-100 shadow-sm transition-opacity hover:text-danger sm:opacity-0 sm:group-hover/att:opacity-100 sm:focus:opacity-100`}
+    >
+      ×
+    </button>
+  );
+}
+
 export function FileCard({ attachment: a }: { attachment: AttachmentDto }) {
   return (
-    <div className="flex max-w-md items-center gap-3 rounded-md border border-rule bg-surface px-3 py-2">
+    <div className="flex max-w-md items-center gap-3 rounded-md bg-accent-soft/60 px-3 py-2">
       <FileIcon type={a.type} />
       <a href={a.url} target="_blank" rel="noopener" className="min-w-0 flex-1 hover:underline">
         <span className="block truncate text-sm text-ink">{a.name}</span>
@@ -76,7 +114,7 @@ function describeType(type: string, name: string): string {
 function FileIcon({ type }: { type: string }) {
   const label = type === "application/pdf" ? "PDF" : type.startsWith("audio/") ? "♪" : type.startsWith("video/") ? "▶" : "";
   return (
-    <span className="flex h-9 w-7 shrink-0 items-center justify-center rounded-sm border border-rule bg-paper text-[9px] font-semibold text-muted">
+    <span className="flex h-9 w-7 shrink-0 items-center justify-center rounded-sm bg-paper text-[9px] font-semibold text-muted">
       {label}
     </span>
   );
@@ -154,7 +192,7 @@ export function PendingFiles({ files, onRemove }: { files: PendingFile[]; onRemo
   return (
     <ul className="flex flex-wrap gap-2">
       {files.map((p) => (
-        <li key={p.id} className="relative flex items-center gap-2 rounded-md border border-rule bg-surface py-1 pl-1 pr-7 text-xs">
+        <li key={p.id} className="relative flex items-center gap-2 rounded-md bg-accent-soft/70 py-1 pl-1 pr-7 text-xs">
           {p.previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={p.previewUrl} alt="" className="size-8 rounded object-cover" />
@@ -181,7 +219,7 @@ export function PendingFiles({ files, onRemove }: { files: PendingFile[]; onRemo
 
 export function AttachButton({ onFiles, label = "Attach files" }: { onFiles: (files: FileList) => void; label?: string }) {
   return (
-    <label className="cursor-pointer rounded p-2 text-muted transition-colors hover:text-ink" title={label}>
+    <label className="cursor-pointer rounded p-1.5 text-muted transition-colors hover:text-ink" title={label}>
       <span className="sr-only">{label}</span>
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
         <path

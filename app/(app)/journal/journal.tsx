@@ -223,7 +223,7 @@ function JumpToDate({ onJump }: { onJump: (day: string) => void }) {
             type="date"
             aria-label="Jump to date"
             onChange={(e) => onJump(e.target.value)}
-            className="rounded border border-rule bg-surface px-1.5 py-0.5 text-ink focus:border-accent focus:outline-none"
+            className="rounded bg-transparent px-1.5 py-0.5 text-ink transition-colors hover:bg-accent-soft focus:bg-accent-soft focus:outline-none"
           />
         </label>
       </div>

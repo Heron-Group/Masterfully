@@ -18,9 +18,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import { Markdown } from "@/components/markdown";
-import { AutoTextarea } from "@/components/markdown-editor";
+import { AutoTextarea } from "@/components/auto-textarea";
 import { ui } from "@/components/ui";
 import { formatAuthors, type GroupDto, type GroupSourceDto } from "@/lib/dto";
 import { addSourcesToGroup, removeSourceFromGroup, reorderGroupSources, saveGroupSourceNote } from "../actions";
@@ -39,6 +39,8 @@ export function GroupSources({ group, library }: { group: GroupDto; library: Lib
   }
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  // A stable id keeps dnd-kit's accessibility ids the same on server and client.
+  const dndId = useId();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -91,7 +93,7 @@ export function GroupSources({ group, library }: { group: GroupDto; library: Lib
       )}
 
       {items.length ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <DndContext id={dndId} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             <ol className="divide-y divide-rule border-y border-rule">
               {items.map((item, index) => (

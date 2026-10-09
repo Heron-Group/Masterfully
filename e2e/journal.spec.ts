@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { editorText, setEditorText, signIn } from "./helpers";
 
 // Runs against the dev server's content folder; seed it first with
 // `node scripts/seed-dev-content.mjs` so there are older entries to load.
@@ -8,15 +8,15 @@ const scroller = (page: Page) => page.getByLabel("Journal entries");
 const composer = (page: Page) => page.getByRole("textbox", { name: "New journal entry" });
 
 async function postEntry(page: Page, text: string) {
-  await composer(page).fill(text);
-  await composer(page).press("ControlOrMeta+Enter");
+  await setEditorText(page, composer(page), text);
+  await page.keyboard.press("ControlOrMeta+Enter");
   await expect(page.locator("article", { hasText: text })).toBeVisible();
 }
 
 async function deleteEntry(page: Page, text: string) {
   const article = page.locator("article", { hasText: text });
   await article.hover();
-  await article.getByRole("button", { name: "Delete" }).click();
+  await article.getByRole("button", { name: "Delete", exact: true }).click();
   await article.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
   await expect(article).toHaveCount(0);
 }
@@ -73,33 +73,35 @@ test("loads older entries when scrolling up, keeping the position", async ({ pag
 test("posting with Cmd/Ctrl+Enter adds the entry at the bottom and clears the composer", async ({ page }) => {
   await signIn(page);
   const text = `E2E post ${Date.now()}`;
-  await composer(page).fill(`${text}\nsecond line`);
-  await composer(page).press("ControlOrMeta+Enter");
+  await setEditorText(page, composer(page), `${text}\nsecond line`);
+  await page.keyboard.press("ControlOrMeta+Enter");
   const article = page.locator("article", { hasText: text });
   await expect(article).toBeVisible();
-  await expect(composer(page)).toHaveValue("");
+  await expect.poll(() => editorText(composer(page))).toBe("");
   await expect(scroller(page).locator("article").last()).toContainText(text);
   await deleteEntry(page, text);
 });
 
 test("a draft survives a reload", async ({ page }) => {
   await signIn(page);
-  await composer(page).fill("Half-finished thought");
+  await setEditorText(page, composer(page), "Half-finished thought");
   await page.reload();
-  await expect(composer(page)).toHaveValue("Half-finished thought");
-  await composer(page).fill("");
+  await expect.poll(() => editorText(composer(page))).toBe("Half-finished thought");
+  await setEditorText(page, composer(page), "");
 });
 
-test("edit in place updates the entry", async ({ page }) => {
+test("click an entry to edit it in place; it saves on leaving", async ({ page }) => {
   await signIn(page);
   const text = `E2E edit ${Date.now()}`;
   await postEntry(page, text);
   const article = page.locator("article", { hasText: text });
-  await article.hover();
-  await article.getByRole("button", { name: "Edit" }).click();
   await page.waitForTimeout(1100); // timestamps have one-second resolution
-  await article.getByRole("textbox").fill(`${text} (revised)`);
-  await article.getByRole("button", { name: "Save" }).click();
+  await article.locator(".prose-rp").click();
+  const editor = page.getByRole("textbox", { name: "Edit journal entry" });
+  await expect(editor).toBeFocused();
+  await page.keyboard.press("End");
+  await page.keyboard.insertText(" (revised)");
+  await page.keyboard.press("Escape");
   await expect(page.locator("article", { hasText: `${text} (revised)` })).toContainText("edited");
   await deleteEntry(page, `${text} (revised)`);
 });
@@ -120,13 +122,13 @@ test("a pasted screenshot and a PDF attach to one entry", async ({ page }) => {
     const target = document.querySelector('[aria-label="New journal entry"]')!;
     target.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
   });
-  await page.locator('input[type="file"]').first().setInputFiles({
+  await page.getByRole("region", { name: "New entry" }).locator('input[type="file"]').setInputFiles({
     name: "reading.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"),
   });
   const text = `E2E attachments ${Date.now()}`;
-  await composer(page).fill(text);
+  await setEditorText(page, composer(page), text);
   await page.getByRole("button", { name: "Post" }).click();
   const article = page.locator("article", { hasText: text });
   await expect(article).toBeVisible();

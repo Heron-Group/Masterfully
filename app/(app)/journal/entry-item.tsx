@@ -1,13 +1,13 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { LiveEditor, type LiveEditorHandle } from "@/components/live-editor/live-editor";
 import { Markdown } from "@/components/markdown";
-import { MarkdownEditor } from "@/components/markdown-editor";
 import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
 import type { EntryDto } from "@/lib/dto";
 import { formatShortDate, formatTime } from "@/lib/time";
 import { jsonFetch, upload } from "@/lib/upload-client";
-import { AttachButton, AttachmentList, PendingFiles, releasePending, toPending, type PendingFile } from "./attachments";
+import { AttachButton, AttachmentList, toPending } from "./attachments";
 
 type Props = {
   entry: EntryDto;
@@ -15,79 +15,150 @@ type Props = {
   onDeleted: (id: string) => void;
 };
 
+function changed() {
+  window.dispatchEvent(new Event(CONTENT_CHANGED_EVENT));
+}
+
+/** Save the entry's text and/or attachment changes. */
+function saveEntry(id: string, parts: { body?: string; remove?: string[]; files?: File[] }, onProgress?: (f: number) => void) {
+  const form = new FormData();
+  if (parts.body !== undefined) form.set("body", parts.body);
+  for (const file of parts.remove ?? []) form.append("remove", file);
+  for (const f of parts.files ?? []) form.append("files", f, f.name);
+  return upload<EntryDto>(`/api/upload/journal/${encodeURIComponent(id)}`, form, onProgress);
+}
+
+/**
+ * One journal entry. Click the text to edit it in place; it saves when you
+ * click away (or Cmd/Ctrl+Enter, or Escape). Files can be added or removed
+ * directly.
+ */
 export const EntryItem = memo(function EntryItem({ entry, onUpdated, onDeleted }: Props) {
-  const [mode, setMode] = useState<"view" | "edit" | "confirm-delete">("view");
+  const [editing, setEditing] = useState<{ x: number; y: number } | "end" | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const edited = entry.updated !== entry.created;
 
-  async function remove() {
-    setBusy(true);
+  async function run(label: string, fn: () => Promise<void>) {
+    setBusy(label);
     setError(null);
     try {
-      await jsonFetch(`/api/journal/${encodeURIComponent(entry.id)}`, { method: "DELETE" });
-      window.dispatchEvent(new Event(CONTENT_CHANGED_EVENT));
-      onDeleted(entry.id);
+      await fn();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't delete the entry.");
-      setBusy(false);
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setBusy(null);
     }
   }
 
+  const attach = (list: FileList) => {
+    const { accepted, rejected } = toPending(list);
+    if (rejected.length) setError(`Too large (over 50 MB): ${rejected.join(", ")}`);
+    if (!accepted.length) return;
+    void run("Uploading…", async () => {
+      const updated = await saveEntry(entry.id, { files: accepted.map((p) => p.file) });
+      changed();
+      onUpdated(updated);
+    });
+  };
+
   return (
     <article id={`entry-${entry.id}`} data-entry-id={entry.id} className="group relative scroll-mt-16 py-3">
-      <header className="mb-1 flex items-baseline gap-2 text-xs text-faint">
+      <header className="mb-1 flex min-h-6 items-center gap-2 text-xs text-faint">
         <time dateTime={entry.created} title={`${formatShortDate(entry.created)} ${formatTime(entry.created)}`} className="tabular-nums text-muted">
           {formatTime(entry.created)}
         </time>
         {edited && <span title={`Edited ${formatShortDate(entry.updated)} ${formatTime(entry.updated)}`}>edited</span>}
-        {mode === "view" && (
-          <span className="ml-auto flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-            {!entry.problem && (
-              <button type="button" onClick={() => setMode("edit")} className="rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-ink">
-                Edit
-              </button>
-            )}
-            <button type="button" onClick={() => setMode("confirm-delete")} className="rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-danger">
-              Delete
+        {busy && <span>{busy}</span>}
+        <span className="ml-auto flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+          {!entry.body && !editing && !entry.problem && (
+            <button type="button" onClick={() => setEditing("end")} className="rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-ink">
+              Add text
             </button>
-          </span>
-        )}
+          )}
+          {!entry.problem && <AttachButton label="Attach files" onFiles={attach} />}
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-danger"
+          >
+            Delete
+          </button>
+        </span>
       </header>
 
       {entry.problem && (
-        <p className="mb-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-ink">
+        <p className="mb-2 rounded-md bg-warn/10 px-3 py-2 text-sm text-ink">
           This entry&apos;s frontmatter can&apos;t be read, so it&apos;s shown as raw text and can&apos;t be edited here.
           Fix it in a text editor. ({entry.problem})
         </p>
       )}
 
-      {mode === "edit" ? (
+      {editing ? (
         <EntryEditor
           entry={entry}
-          onCancel={() => setMode("view")}
-          onSaved={(e) => {
-            setMode("view");
-            onUpdated(e);
+          focusAt={editing}
+          onDone={(updated) => {
+            setEditing(null);
+            if (updated) {
+              changed();
+              onUpdated(updated);
+            }
           }}
         />
       ) : (
-        <>
-          {entry.body && <Markdown>{entry.body}</Markdown>}
-          <AttachmentList attachments={entry.attachments} />
-        </>
+        entry.body && (
+          <div
+            onClick={(e) => {
+              if (entry.problem) return;
+              const target = e.target as HTMLElement;
+              if (target.closest("a, button, input, img")) return;
+              if (window.getSelection()?.toString()) return; // selecting text to copy
+              setEditing({ x: e.clientX, y: e.clientY });
+            }}
+            className={entry.problem ? "" : "cursor-text"}
+          >
+            <Markdown>{entry.body}</Markdown>
+          </div>
+        )
       )}
 
-      {mode === "confirm-delete" && (
-        <div role="alertdialog" aria-label="Delete entry" className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm">
+      <AttachmentList
+        attachments={entry.attachments}
+        onRemove={
+          entry.problem
+            ? undefined
+            : (file) =>
+                run("Removing…", async () => {
+                  const updated = await saveEntry(entry.id, { remove: [file] });
+                  changed();
+                  onUpdated(updated);
+                })
+        }
+      />
+
+      {confirmDelete && (
+        <div role="alertdialog" aria-label="Delete entry" className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-danger/5 px-3 py-2 text-sm">
           <span className="mr-auto">
             Delete this entry{entry.attachments.length ? ` and its ${entry.attachments.length} attachment${entry.attachments.length === 1 ? "" : "s"}` : ""}?
           </span>
-          <button type="button" onClick={() => setMode("view")} disabled={busy} className="rounded px-2.5 py-1 text-muted hover:text-ink">
+          <button type="button" onClick={() => setConfirmDelete(false)} disabled={!!busy} className="rounded px-2.5 py-1 text-muted hover:text-ink">
             Cancel
           </button>
-          <button type="button" onClick={remove} disabled={busy} className="rounded bg-danger px-2.5 py-1 font-medium text-paper disabled:opacity-60">
-            {busy ? "Deleting…" : "Delete"}
+          <button
+            type="button"
+            disabled={!!busy}
+            onClick={() =>
+              run("Deleting…", async () => {
+                await jsonFetch(`/api/journal/${encodeURIComponent(entry.id)}`, { method: "DELETE" });
+                changed();
+                onDeleted(entry.id);
+              })
+            }
+            className="rounded bg-danger px-2.5 py-1 font-medium text-paper disabled:opacity-60"
+          >
+            Delete
           </button>
         </div>
       )}
@@ -96,85 +167,68 @@ export const EntryItem = memo(function EntryItem({ entry, onUpdated, onDeleted }
   );
 });
 
-function EntryEditor({ entry, onCancel, onSaved }: { entry: EntryDto; onCancel: () => void; onSaved: (e: EntryDto) => void }) {
-  const [body, setBody] = useState(entry.body);
-  const [removed, setRemoved] = useState<Set<string>>(new Set());
-  const [added, setAdded] = useState<PendingFile[]>([]);
+/** The entry's text as a live editor; saves on leaving it. */
+function EntryEditor({
+  entry,
+  focusAt,
+  onDone,
+}: {
+  entry: EntryDto;
+  focusAt: { x: number; y: number } | "end";
+  onDone: (updated: EntryDto | null) => void;
+}) {
+  const editor = useRef<LiveEditorHandle>(null);
+  const [text, setText] = useState(entry.body);
   const [saving, setSaving] = useState(false);
-  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const latest = useRef(entry.body);
 
-  const remaining = entry.attachments.length - removed.size + added.length;
-  const canSave = !saving && (!!body.trim() || remaining > 0);
+  useEffect(() => {
+    editor.current?.focus(focusAt);
+    // Focus once, where the entry was clicked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  async function save() {
-    if (!canSave) return;
+  async function finish() {
+    const body = latest.current;
+    if (body.trim() === entry.body.trim()) {
+      onDone(null);
+      return;
+    }
+    if (!body.trim() && !entry.attachments.length) {
+      setError("An entry needs some text or an attachment. To remove it, use Delete.");
+      editor.current?.focus("end");
+      return;
+    }
     setSaving(true);
-    setError(null);
-    const form = new FormData();
-    form.set("body", body);
-    for (const file of removed) form.append("remove", file);
-    for (const p of added) form.append("files", p.file, p.file.name);
     try {
-      const updated = await upload<EntryDto>(`/api/upload/journal/${encodeURIComponent(entry.id)}`, form, added.length ? setProgress : undefined);
-      releasePending(added);
-      window.dispatchEvent(new Event(CONTENT_CHANGED_EVENT));
-      onSaved(updated);
+      onDone(await saveEntry(entry.id, { body }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save the entry.");
       setSaving(false);
-      setProgress(null);
+      setError(err instanceof Error ? `${err.message} Your text is still here.` : "Couldn't save. Your text is still here.");
     }
   }
 
   return (
-    <div className="space-y-2">
-      <MarkdownEditor value={body} onChange={setBody} onSubmit={save} autoFocus minRows={3} maxHeight="60vh" />
-      {entry.attachments.length > 0 && (
-        <ul className="space-y-1 text-sm">
-          {entry.attachments.map((a) => {
-            const isRemoved = removed.has(a.file);
-            return (
-              <li key={a.file} className="flex items-center gap-2">
-                <span className={`min-w-0 flex-1 truncate ${isRemoved ? "text-faint line-through" : ""}`}>{a.name}</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setRemoved((r) => {
-                      const next = new Set(r);
-                      if (isRemoved) next.delete(a.file);
-                      else next.add(a.file);
-                      return next;
-                    })
-                  }
-                  className="rounded px-1.5 py-0.5 text-xs text-muted hover:text-ink"
-                >
-                  {isRemoved ? "Keep" : "Remove"}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+    <div>
+      <LiveEditor
+        ref={editor}
+        value={text}
+        onChange={(v) => {
+          latest.current = v;
+          setText(v);
+        }}
+        onBlur={() => void finish()}
+        onSubmit={() => void finish()}
+        onEscape={() => void finish()}
+        ariaLabel="Edit journal entry"
+        placeholder="Write something…"
+      />
+      {(saving || error) && (
+        <p role={error ? "alert" : undefined} className={`mt-1 text-xs ${error ? "text-danger" : "text-faint"}`}>
+          {error ?? "Saving…"}
+        </p>
       )}
-      <PendingFiles files={added} onRemove={(id) => setAdded((fs) => fs.filter((f) => f.id !== id))} />
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <div className="flex items-center gap-2">
-        <AttachButton
-          label="Add files"
-          onFiles={(list) => {
-            const { accepted, rejected } = toPending(list);
-            setAdded((a) => [...a, ...accepted]);
-            setError(rejected.length ? `Too large (over 50 MB): ${rejected.join(", ")}` : null);
-          }}
-        />
-        <span className="mr-auto text-xs text-faint">⌘/Ctrl + Enter to save</span>
-        <button type="button" onClick={onCancel} disabled={saving} className="rounded px-2.5 py-1 text-sm text-muted hover:text-ink">
-          Cancel
-        </button>
-        <button type="button" onClick={save} disabled={!canSave} className="rounded bg-ink px-3 py-1 text-sm font-medium text-paper disabled:opacity-40">
-          {saving ? (progress !== null && progress < 1 ? `${Math.round(progress * 100)}%` : "Saving…") : "Save"}
-        </button>
-      </div>
     </div>
   );
 }

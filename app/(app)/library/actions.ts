@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { ContentError, getContentStore } from "@/lib/content";
 import { toSourceType } from "@/lib/content/schemas";
-import { sourceFields } from "@/lib/uploads";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -22,18 +21,35 @@ async function run(fn: () => Promise<unknown>, opts: { refresh?: boolean } = {})
   }
 }
 
-export async function updateSourceDetails(id: string, form: FormData): Promise<ActionResult> {
+export type SourceProps = {
+  title?: string;
+  authors?: string[];
+  year?: string;
+  type?: string;
+  url?: string;
+};
+
+/** Save one or more inline-edited properties. Empty year or link clears it. */
+export async function updateSourceProps(id: string, props: SourceProps): Promise<ActionResult> {
   return run(async () => {
-    const fields = sourceFields((n) => {
-      const v = form.get(n);
-      return typeof v === "string" ? v : undefined;
-    });
-    if (!fields.title) throw new ContentError("A source needs a title", 400);
-    await (await getContentStore()).updateSource(id, {
-      ...fields,
-      type: toSourceType(fields.type),
-      url: fields.url ?? "",
-    });
+    const patch: Parameters<Awaited<ReturnType<typeof getContentStore>>["updateSource"]>[1] = {};
+    if (props.title !== undefined) {
+      if (!props.title.trim()) throw new ContentError("A source needs a title", 400);
+      patch.title = props.title;
+    }
+    if (props.authors !== undefined) patch.authors = props.authors;
+    if (props.type !== undefined) patch.type = toSourceType(props.type);
+    if (props.year !== undefined) {
+      const y = props.year.trim();
+      if (y && !/^\d{1,4}$/.test(y)) throw new ContentError("Year should be a number like 2025", 400);
+      patch.year = y ? Number(y) : null;
+    }
+    if (props.url !== undefined) {
+      const u = props.url.trim();
+      if (u && !/^https?:\/\//i.test(u)) throw new ContentError("The link should start with http:// or https://", 400);
+      patch.url = u;
+    }
+    await (await getContentStore()).updateSource(id, patch);
   });
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MarkdownEditor } from "@/components/markdown-editor";
+import { LiveEditor } from "@/components/live-editor/live-editor";
 import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
 import { saveResearchContext } from "./actions";
@@ -14,13 +14,18 @@ export function ResearchContextEditor({ initial }: { initial: string }) {
     return r.ok ? { ok: true } : { ok: false, error: r.error };
   });
   return (
-    <MarkdownEditor
-      value={text}
-      onChange={setText}
-      placeholder={"My research question is…\n\nCurrent focus: …"}
-      minRows={6}
-      toolbar={<span className="text-xs"><SaveStatus state={state} error={error} onRetry={() => void flush()} /></span>}
-      textareaProps={{ "aria-label": "Research context", onBlur: () => void flush() }}
-    />
+    <div>
+      <LiveEditor
+        value={text}
+        onChange={setText}
+        onBlur={() => void flush()}
+        placeholder="My research question is…"
+        ariaLabel="Research context"
+        className="min-h-24"
+      />
+      <p className="mt-1 h-4 text-xs">
+        <SaveStatus state={state} error={error} onRetry={() => void flush()} />
+      </p>
+    </div>
   );
 }

@@ -116,9 +116,8 @@ test("group note, expandable source notes and overview are saved separately", as
 
 test("rename the group without renaming the file", async ({ page }) => {
   await openGroup(page);
-  await page.getByRole("button", { name: "Rename" }).click();
   await page.getByLabel("Group title").fill(`${TITLE} (renamed)`);
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByLabel("Group title").press("Enter");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`${TITLE} (renamed)`);
   expect(groupFile()).toContain(`title: ${TITLE} (renamed)`);
 });

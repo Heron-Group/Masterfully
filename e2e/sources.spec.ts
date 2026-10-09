@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { git, handRemove, handWrite, pdfFile } from "./fixtures";
-import { signIn } from "./helpers";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { CONTENT_DIR, git, handRemove, handWrite, pdfFile } from "./fixtures";
+
+const read = (rel: string) => readFileSync(path.join(CONTENT_DIR, rel), "utf8");
+import { setEditorText, signIn } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -40,13 +44,15 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   await page.getByLabel("Type", { exact: true }).selectOption("article");
   await page.getByLabel("Link", { exact: true }).fill("https://example.org/paper");
   await page.locator('input[type="file"]').setInputFiles(pdfFile(40 * 1024 * 1024, `Forty megabytes ${stamp}`));
-  await page.getByPlaceholder(/Your notes/).fill("First **impressions**.");
-  await page.getByLabel(`E2E Group ${stamp}`).check();
+  await setEditorText(page, page.getByRole("textbox", { name: "My notes" }), "First **impressions**.");
+  await page.locator("label", { hasText: `E2E Group ${stamp}` }).click();
   await page.getByRole("button", { name: "Add source" }).click();
 
   await page.waitForURL(/\/library\/brody-2025-e2e-graphic/, { timeout: 90_000 });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(TITLE);
-  await expect(page.getByRole("link", { name: /example\.org\/paper/ })).toHaveAttribute("target", "_blank");
+  await expect(page.getByLabel("Title", { exact: true }).filter({ visible: true })).toHaveValue(TITLE);
+  await expect(page.getByLabel("Link", { exact: true }).filter({ visible: true })).toHaveValue("https://example.org/paper");
+  await expect(page.getByRole("link", { name: "Open link in a new tab" })).toHaveAttribute("target", "_blank");
 
   const iframe = page.locator("iframe");
   const src = await iframe.getAttribute("src");
@@ -76,24 +82,31 @@ test("library search and filters", async ({ page }) => {
   await expect(page.getByText("No sources match.")).toBeVisible();
 });
 
-test("notes autosave and survive a reload", async ({ page }) => {
+test("notes autosave exactly as typed and survive a reload", async ({ page }) => {
   await signIn(page, "/library");
   await page.getByRole("link", { name: new RegExp(TITLE) }).click();
+  await page.waitForURL(/\/library\/brody-/);
+  const id = page.url().split("/").pop()!;
   const notes = page.getByRole("textbox", { name: "My notes" });
-  await notes.fill("Autosaved note\n\n## My own heading\n\nKept.");
+  await setEditorText(page, notes, "Autosaved note\n\n## My own heading\n\nKept.");
   await expect(page.getByText("Saved", { exact: true })).toBeVisible({ timeout: 10_000 });
+  expect(read(`sources/${id}.md`)).toContain("## Notes\n\nAutosaved note\n\n## My own heading\n\nKept.\n");
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "My notes" })).toHaveValue("Autosaved note\n\n## My own heading\n\nKept.");
+  await expect(page.getByRole("textbox", { name: "My notes" })).toContainText("My own heading");
   expect(git("log", "-1", "--format=%s")).toMatch(/^source: update notes /);
 });
 
 test("edit details, leave and rejoin a group", async ({ page }) => {
   await signIn(page, "/library");
   await page.getByRole("link", { name: new RegExp(TITLE) }).click();
-  await page.getByRole("button", { name: "Edit details" }).click();
-  await page.getByLabel("Year", { exact: true }).fill("2024");
-  await page.getByRole("button", { name: "Save details" }).click();
-  await expect(page.getByText("2024")).toBeVisible();
+  await page.waitForURL(/\/library\/brody-/);
+  const id = page.url().split("/").pop()!;
+  await page.getByLabel("Year", { exact: true }).filter({ visible: true }).fill("2024");
+  await page.getByLabel("Year", { exact: true }).filter({ visible: true }).press("Enter");
+  await expect.poll(() => read(`sources/${id}.md`)).toContain("year: 2024");
+  await page.getByLabel("Title", { exact: true }).filter({ visible: true }).fill(`${TITLE} (revised)`);
+  await page.getByLabel("Title", { exact: true }).filter({ visible: true }).press("Enter");
+  await expect.poll(() => read(`sources/${id}.md`)).toContain(`title: ${TITLE} (revised)`);
 
   await page.getByRole("button", { name: `Remove from E2E Group ${stamp}` }).click();
   await expect(page.getByText("Not in any group yet.")).toBeVisible();

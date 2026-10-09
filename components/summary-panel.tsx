@@ -131,7 +131,7 @@ export function SummaryPanel({
       )}
 
       {run.state === "error" && (
-        <div role="alert" className="mb-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm">
+        <div role="alert" className="mb-3 rounded-md bg-danger/5 px-3 py-2 text-sm">
           <p className="text-danger">{run.message}</p>
           {summary && <p className="mt-1 text-muted">The previous summary below is unchanged.</p>}
           <div className="mt-2 flex flex-wrap gap-2">
@@ -170,7 +170,7 @@ export function SummaryPanel({
 
 function AiBox({ label, stale, live, children }: { label: string; stale?: boolean; live?: boolean; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-rule bg-accent-soft/40 p-4" aria-live={live ? "polite" : undefined} aria-busy={live}>
+    <div className="rounded-lg bg-accent-soft/50 px-5 py-4" aria-live={live ? "polite" : undefined} aria-busy={live}>
       <p className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted">
         <span className="rounded-full border border-accent/30 px-2 py-px text-accent">AI</span>
         <span>{label}</span>

@@ -75,68 +75,121 @@ body {
   border-radius: 2px;
 }
 
-/* --- Rendered Markdown ------------------------------------------------------ */
+/* --- Markdown: rendered pages and the live editor ---------------------------
+   The read-only view (.prose-rp from react-markdown) and the editor
+   (CodeMirror lines with cm-md-* classes) share these metrics so that
+   clicking into text to edit it doesn't move anything. A blank line in the
+   source is one --gap, the same as the space between rendered blocks. */
 
 .prose-rp {
+  --gap: 0.8rem;
+  --indent: 1.5em;
   font-family: var(--font-serif);
   font-size: 1.0625rem;
   line-height: 1.65;
   color: var(--ink);
   overflow-wrap: anywhere;
 }
-.prose-rp > :first-child { margin-top: 0; }
-.prose-rp > :last-child { margin-bottom: 0; }
-.prose-rp p, .prose-rp ul, .prose-rp ol, .prose-rp blockquote, .prose-rp pre, .prose-rp table {
-  margin: 0.7em 0;
-}
-.prose-rp h1, .prose-rp h2, .prose-rp h3, .prose-rp h4 {
+
+/* Rendered blocks */
+.prose-rp > * { margin: 0; }
+.prose-rp > * + * { margin-top: var(--gap); }
+.prose-rp h1, .prose-rp h2, .prose-rp h3, .prose-rp h4, .prose-rp h5, .prose-rp h6,
+.prose-rp .cm-md-h {
   font-weight: 600;
   line-height: 1.3;
-  margin: 1.3em 0 0.4em;
   letter-spacing: -0.01em;
+  padding-top: 0.45rem;
 }
-.prose-rp h1 { font-size: 1.35em; }
-.prose-rp h2 { font-size: 1.2em; }
-.prose-rp h3 { font-size: 1.08em; }
-.prose-rp h4 { font-size: 1em; }
-.prose-rp ul { list-style: disc; padding-left: 1.35em; }
-.prose-rp ol { list-style: decimal; padding-left: 1.5em; }
-.prose-rp li { margin: 0.2em 0; }
-.prose-rp li > ul, .prose-rp li > ol { margin: 0.2em 0; }
-.prose-rp ul.contains-task-list { list-style: none; padding-left: 0.2em; }
-.prose-rp input[type="checkbox"] { margin-right: 0.45em; accent-color: var(--accent); }
-.prose-rp a {
+.prose-rp h1, .prose-rp .cm-md-h1 { font-size: 1.45em; }
+.prose-rp h2, .prose-rp .cm-md-h2 { font-size: 1.25em; }
+.prose-rp h3, .prose-rp .cm-md-h3 { font-size: 1.1em; }
+.prose-rp h4, .prose-rp h5, .prose-rp h6,
+.prose-rp .cm-md-h4, .prose-rp .cm-md-h5, .prose-rp .cm-md-h6 { font-size: 1em; }
+
+.prose-rp ul, .prose-rp ol { list-style: none; padding: 0; }
+.prose-rp li { position: relative; padding-left: var(--indent); margin: 0; }
+.prose-rp li > ul, .prose-rp li > ol, .prose-rp li > p { margin: 0; }
+.prose-rp ul > li::before,
+.prose-rp ol > li::before,
+.prose-rp .cm-md-bullet {
+  position: absolute;
+  width: 1.1em;
+  text-align: right;
+  color: var(--muted);
+}
+.prose-rp ul > li::before { content: "•"; left: 0; }
+.prose-rp ol > li::before { content: counter(list-item) "."; left: 0; font-variant-numeric: tabular-nums; }
+.prose-rp li.task-list-item::before { content: none; }
+.prose-rp input[type="checkbox"], .prose-rp .cm-md-task {
+  margin: 0 0.45em 0 0;
+  vertical-align: -0.1em;
+  accent-color: var(--accent);
+}
+.prose-rp li.task-list-item { padding-left: var(--indent); }
+
+.prose-rp a, .prose-rp .cm-md-link {
   color: var(--accent);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
-.prose-rp blockquote {
-  border-left: 2px solid var(--rule);
-  padding-left: 1em;
-  color: var(--muted);
-  font-style: italic;
-}
-.prose-rp code {
+.prose-rp strong, .prose-rp .cm-md-strong { font-weight: 600; }
+.prose-rp em, .prose-rp .cm-md-em { font-style: italic; }
+.prose-rp del, .prose-rp .cm-md-strike { text-decoration: line-through; }
+.prose-rp code, .prose-rp .cm-md-code {
   font-family: var(--font-mono);
   font-size: 0.86em;
   background: var(--accent-soft);
   border-radius: 3px;
   padding: 0.1em 0.3em;
 }
+.prose-rp blockquote, .prose-rp .cm-md-quote {
+  border-left: 2px solid var(--rule);
+  padding-left: 1em;
+  color: var(--muted);
+  font-style: italic;
+}
+.prose-rp blockquote > * { margin: 0; }
+.prose-rp blockquote > * + * { margin-top: var(--gap); }
 .prose-rp pre {
   font-family: var(--font-mono);
   font-size: 0.85em;
-  line-height: 1.5;
+  line-height: 1.6;
   background: var(--accent-soft);
   border-radius: 6px;
-  padding: 0.8em 1em;
+  padding: 0.6em 1em;
   overflow-x: auto;
 }
 .prose-rp pre code { background: none; padding: 0; font-size: inherit; }
-.prose-rp hr { border: 0; border-top: 1px solid var(--rule); margin: 1.5em 0; }
+.prose-rp hr { border: 0; border-top: 1px solid var(--rule); margin-top: calc(var(--gap) + 0.4em); padding-bottom: 0.4em; }
 .prose-rp img { max-width: 100%; border-radius: 4px; }
 .prose-rp table { border-collapse: collapse; font-family: var(--font-sans); font-size: 0.88em; display: block; overflow-x: auto; }
 .prose-rp th, .prose-rp td { border: 1px solid var(--rule); padding: 0.35em 0.6em; text-align: left; }
 .prose-rp th { font-weight: 600; }
-.prose-rp strong { font-weight: 600; }
+
+/* Live editor (CodeMirror): no box, the page is the editor. */
+.live-editor .cm-editor { background: transparent; }
+.live-editor .cm-editor.cm-focused { outline: none; }
+.live-editor .cm-scroller { font-family: inherit; line-height: inherit; overflow: visible; }
+.live-editor .cm-content { padding: 0; caret-color: var(--ink); min-height: 1.65em; }
+.live-editor .cm-line { padding: 0; }
+.live-editor .cm-placeholder { color: var(--faint); font-style: normal; }
+.live-editor .cm-selectionBackground, .live-editor ::selection { background: var(--accent-soft) !important; }
+.live-editor .cm-md-blank { line-height: var(--gap); }
+.live-editor .cm-md-li { position: relative; padding-left: calc((var(--depth, 0) + 1) * var(--indent)); }
+.live-editor .cm-md-li-raw { padding-left: calc(var(--depth, 0) * var(--indent) + 0.2em); }
+.live-editor .cm-md-bullet { top: 0; }
+.live-editor .cm-md-quote { padding-left: 1em; }
+.live-editor .cm-md-codeblock {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.6;
+  background: var(--accent-soft);
+  padding: 0 1em;
+}
+.live-editor .cm-md-fence { color: var(--faint); }
+.live-editor .cm-md-table { font-family: var(--font-mono); font-size: 0.85em; }
+.live-editor .cm-md-hr { display: inline-block; width: 100%; border-top: 1px solid var(--rule); vertical-align: middle; }
+/* Let a min-height on the editor make the whole area clickable. */
+.live-editor .cm-editor, .live-editor .cm-scroller, .live-editor .cm-content { min-height: inherit; }

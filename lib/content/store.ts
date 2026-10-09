@@ -64,7 +64,7 @@ export type NewSource = {
   notes?: string;
 };
 
-export type SourcePatch = Partial<Pick<Source, "title" | "authors" | "year" | "type" | "url">>;
+export type SourcePatch = Partial<Pick<Source, "title" | "authors" | "type" | "url">> & { year?: number | null };
 
 /**
  * The only code that touches the content folder. Files on disk are the
@@ -592,14 +592,20 @@ export class ContentStore {
     );
   }
 
+  /**
+   * Change some of a source's details. Keys left out are unchanged; `year:
+   * null` or `url: ""` clear that field. An empty title is ignored.
+   */
   async updateSource(id: string, patch: SourcePatch): Promise<Source> {
     return this.write(`source: update details ${id}`, async (tx) => {
       const source = this.requireSource(id);
       const next: Source = {
         ...source,
-        ...definedOnly(patch),
         title: patch.title?.trim() || source.title,
-        url: patch.url !== undefined ? patch.url.trim() || undefined : source.url,
+        authors: patch.authors ? patch.authors.map((a) => a.trim()).filter(Boolean) : source.authors,
+        year: "year" in patch ? (patch.year ?? undefined) : source.year,
+        type: patch.type ?? source.type,
+        url: "url" in patch ? patch.url?.trim() || undefined : source.url,
         updated: this.stamp(),
       };
       await tx.writeText(source.path, serializeSource(next));
@@ -1050,10 +1056,6 @@ function uniqueFileName(dir: string, name: string, taken: (p: string) => boolean
   let candidate = `${dir}/${name}`;
   for (let n = 2; taken(candidate); n++) candidate = `${dir}/${base}-${n}${ext}`;
   return candidate;
-}
-
-function definedOnly<T extends object>(obj: T): Partial<T> {
-  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
 function unreadable(rel: string, problem: string): ContentError {

@@ -14,7 +14,8 @@ export default function NewSourcePage(props: PageProps<"/library/new">) {
       <Link href="/library" className="text-sm text-muted hover:text-ink">
         ← Library
       </Link>
-      <h1 className={`${ui.h1} mb-8 mt-3`}>Add a source</h1>
+      <h1 className="sr-only">Add a source</h1>
+      <div className="mt-6" />
       <Suspense fallback={<p className="text-sm text-faint">Loading…</p>}>
         <FormLoader searchParams={props.searchParams} />
       </Suspense>
