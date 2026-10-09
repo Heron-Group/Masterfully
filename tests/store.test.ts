@@ -1,0 +1,451 @@
+import { execFileSync } from "node:child_process";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ContentStore, type StoreOptions } from "@/lib/content/store";
+
+let root: string;
+let dir: string;
+let clock: Date;
+const stores: ContentStore[] = [];
+
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+}
+
+async function makeStore(overrides: Partial<StoreOptions> = {}): Promise<ContentStore> {
+  const store = new ContentStore({
+    dir,
+    branch: "main",
+    pushDelayMs: 60_000,
+    authorName: "Test",
+    authorEmail: "test@example.com",
+    refreshIntervalMs: 0,
+    now: () => clock,
+    ...overrides,
+  });
+  stores.push(store);
+  await store.init();
+  return store;
+}
+
+function tick(seconds = 1) {
+  clock = new Date(clock.getTime() + seconds * 1000);
+}
+
+beforeEach(async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), "portal-test-"));
+  dir = path.join(root, "content");
+  clock = new Date("2026-10-09T14:32:05Z");
+});
+
+afterEach(async () => {
+  for (const s of stores.splice(0)) s.dispose();
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+describe("initialisation", () => {
+  it("creates a repo with settings.md in an empty folder", async () => {
+    const store = await makeStore();
+    expect(await fs.readFile(path.join(dir, "settings.md"), "utf8")).toContain("updated:");
+    expect(await store.git.commitCount()).toBe(1);
+    expect(store.syncStatus().state).toBe("local");
+  });
+
+  it("clones from the remote when the folder is empty", async () => {
+    const remote = path.join(root, "remote.git");
+    git(root, "init", "--bare", "--initial-branch=main", remote);
+    const seed = path.join(root, "seed");
+    git(root, "clone", remote, seed);
+    await fs.mkdir(path.join(seed, "sources"));
+    await fs.writeFile(path.join(seed, "sources", "a.md"), "---\ntitle: From GitHub\n---\n");
+    git(seed, "add", "-A");
+    git(seed, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-m", "seed");
+    git(seed, "push", "origin", "main");
+
+    const store = await makeStore({ remote });
+    expect((await store.getSource("a"))?.title).toBe("From GitHub");
+  });
+
+  it("commits files that were already in the folder", async () => {
+    await fs.mkdir(path.join(dir, "groups"), { recursive: true });
+    await fs.writeFile(path.join(dir, "groups", "g.md"), "---\ntitle: G\n---\n");
+    const store = await makeStore();
+    expect(git(dir, "status", "--porcelain")).toBe("");
+    expect((await store.getGroup("g"))?.title).toBe("G");
+  });
+});
+
+describe("journal", () => {
+  it("posting creates exactly one .md file and one commit", async () => {
+    const store = await makeStore();
+    const before = await store.git.commitCount();
+    const entry = await store.createJournalEntry({ body: "First thought" });
+
+    expect(entry.id).toBe("2026-10-09T14-32-05Z");
+    expect(entry.path).toBe("journal/2026/10/2026-10-09T14-32-05Z.md");
+    expect(await store.git.commitCount()).toBe(before + 1);
+    expect(git(dir, "show", "--name-only", "--format=%s", "HEAD").split("\n").filter(Boolean)).toEqual([
+      "journal: add entry 2026-10-09 15:32",
+      "journal/2026/10/2026-10-09T14-32-05Z.md",
+    ]);
+    expect(git(dir, "status", "--porcelain")).toBe("");
+  });
+
+  it("gives entries in the same second distinct ids", async () => {
+    const store = await makeStore();
+    const a = await store.createJournalEntry({ body: "a" });
+    const b = await store.createJournalEntry({ body: "b" });
+    expect(b.id).toBe(`${a.id}-2`);
+  });
+
+  it("rejects an empty entry", async () => {
+    const store = await makeStore();
+    await expect(store.createJournalEntry({ body: "  " })).rejects.toThrow(/text or an attachment/);
+  });
+
+  it("pages backwards from the newest entry", async () => {
+    const store = await makeStore();
+    for (let i = 0; i < 5; i++) {
+      await store.createJournalEntry({ body: `n${i}` });
+      tick(60);
+    }
+    const last = await store.listJournal({ limit: 2 });
+    expect(last.entries.map((e) => e.body)).toEqual(["n3", "n4"]);
+    expect(last.hasMore).toBe(true);
+    const older = await store.listJournal({ before: last.entries[0].id, limit: 2 });
+    expect(older.entries.map((e) => e.body)).toEqual(["n1", "n2"]);
+    const oldest = await store.listJournal({ before: older.entries[0].id, limit: 2 });
+    expect(oldest.entries.map((e) => e.body)).toEqual(["n0"]);
+    expect(oldest.hasMore).toBe(false);
+  });
+
+  it("edits update the updated timestamp only", async () => {
+    const store = await makeStore();
+    const entry = await store.createJournalEntry({ body: "draft" });
+    tick(120);
+    const edited = await store.updateJournalEntry(entry.id, { body: "final" });
+    expect(edited.created).toBe("2026-10-09T14:32:05Z");
+    expect(edited.updated).toBe("2026-10-09T14:34:05Z");
+    expect(git(dir, "log", "-1", "--format=%s")).toBe("journal: edit entry 2026-10-09 15:32");
+  });
+
+  it("stores attachments and deletes them with the entry", async () => {
+    const store = await makeStore();
+    const staged = await store.stageUpload(Buffer.from("fake image"));
+    const entry = await store.createJournalEntry({
+      body: "",
+      attachments: [{ ...staged, name: "Screen Shot.PNG", type: "image/png" }],
+    });
+    expect(entry.attachments).toEqual([
+      {
+        file: `attachments/journal/${entry.id}/screen-shot.png`,
+        name: "Screen Shot.PNG",
+        type: "image/png",
+        size: 10,
+      },
+    ]);
+    const files = git(dir, "show", "--name-only", "--format=", "HEAD").split("\n").sort();
+    expect(files).toEqual([`attachments/journal/${entry.id}/screen-shot.png`, entry.path].sort());
+
+    await store.deleteJournalEntry(entry.id);
+    await expect(fs.stat(path.join(dir, "attachments"))).rejects.toThrow();
+    expect(await store.getJournalEntry(entry.id)).toBeNull();
+    expect(git(dir, "status", "--porcelain")).toBe("");
+  });
+
+  it("adds and removes attachments when editing", async () => {
+    const store = await makeStore();
+    const a = await store.stageUpload(Buffer.from("a"));
+    const entry = await store.createJournalEntry({
+      body: "x",
+      attachments: [{ ...a, name: "a.pdf", type: "application/pdf" }],
+    });
+    const b = await store.stageUpload(Buffer.from("b"));
+    const edited = await store.updateJournalEntry(entry.id, {
+      removeAttachments: [entry.attachments[0].file],
+      addAttachments: [{ ...b, name: "a.pdf", type: "application/pdf" }],
+    });
+    expect(edited.attachments.map((x) => x.file)).toEqual([`attachments/journal/${entry.id}/a.pdf`]);
+    expect(await fs.readFile(path.join(dir, edited.attachments[0].file), "utf8")).toBe("b");
+  });
+
+  it("never deletes files outside attachments/ named in hand-edited frontmatter", async () => {
+    const store = await makeStore();
+    const entry = await store.createJournalEntry({ body: "x" });
+    const raw = await fs.readFile(path.join(dir, entry.path), "utf8");
+    await fs.writeFile(
+      path.join(dir, entry.path),
+      raw.replace("---\nx", "attachments:\n  - file: settings.md\n---\nx"),
+    );
+    await store.deleteJournalEntry(entry.id);
+    expect(await fs.readFile(path.join(dir, "settings.md"), "utf8")).toContain("---");
+  });
+
+  it("refuses to overwrite an entry whose frontmatter is broken", async () => {
+    const store = await makeStore();
+    const entry = await store.createJournalEntry({ body: "x" });
+    await fs.writeFile(path.join(dir, entry.path), "---\ncreated: [broken\n---\nx\n");
+    await expect(store.updateJournalEntry(entry.id, { body: "y" })).rejects.toThrow(/can't be read/);
+    expect(await fs.readFile(path.join(dir, entry.path), "utf8")).toContain("[broken");
+  });
+});
+
+describe("index", () => {
+  it("rebuilds everything from the files", async () => {
+    const store = await makeStore();
+    await store.createJournalEntry({ body: "j" });
+    const source = await store.createSource({ title: "A book", authors: ["Doe, Jane"], year: 2020 });
+    await store.createGroup({ title: "G" });
+    await store.addSourceToGroup("g", source.id, "why");
+
+    const fresh = await makeStore();
+    expect((await fresh.listJournal()).entries).toHaveLength(1);
+    expect((await fresh.getSource(source.id))?.title).toBe("A book");
+    expect((await fresh.getGroup("g"))?.sources).toEqual([{ id: source.id, note: "why" }]);
+
+    await store.rebuildIndex();
+    expect((await store.listSources()).map((s) => s.id)).toEqual([source.id]);
+  });
+
+  it("picks up files edited, added and deleted by hand", async () => {
+    const store = await makeStore();
+    const s = await store.createSource({ title: "Original" });
+    const file = path.join(dir, s.path);
+    const raw = await fs.readFile(file, "utf8");
+    await fs.writeFile(file, raw.replace("title: Original", "title: Edited in Obsidian"));
+    expect((await store.getSource(s.id))?.title).toBe("Edited in Obsidian");
+
+    await fs.writeFile(path.join(dir, "sources", "manual.md"), "No frontmatter at all");
+    expect((await store.getSource("manual"))?.notes).toBe("No frontmatter at all");
+
+    await fs.rm(file);
+    expect(await store.getSource(s.id)).toBeNull();
+  });
+});
+
+describe("sources and groups", () => {
+  it("creates readable ids", async () => {
+    const store = await makeStore();
+    const s = await store.createSource({
+      title: "The Graphic Language of Co-design",
+      authors: ["Brody, Ann"],
+      year: 2025,
+    });
+    expect(s.id).toBe("brody-2025-graphic-language-co");
+    const again = await store.createSource({
+      title: "The Graphic Language of Co-design",
+      authors: ["Brody, Ann"],
+      year: 2025,
+    });
+    expect(again.id).toBe("brody-2025-graphic-language-co-2");
+  });
+
+  it("adds a new source to groups and stores a PDF in one commit", async () => {
+    const store = await makeStore();
+    await store.createGroup({ title: "Methods" });
+    const pdf = await store.stageUpload(Buffer.from("%PDF-1.7"));
+    const before = await store.git.commitCount();
+    const s = await store.createSource(
+      { title: "Paper", notes: "Notes here" },
+      { pdf: { ...pdf, name: "p.pdf", type: "application/pdf" }, groups: ["methods"] },
+    );
+    expect(await store.git.commitCount()).toBe(before + 1);
+    expect(s.pdf).toBe(`attachments/sources/${s.id}.pdf`);
+    expect((await store.getGroup("methods"))?.sources).toEqual([{ id: s.id, note: "" }]);
+    expect((await store.getSource(s.id))?.notes).toBe("Notes here");
+  });
+
+  it("deleting a source removes it from every group and deletes its PDF", async () => {
+    const store = await makeStore();
+    await store.createGroup({ title: "One" });
+    await store.createGroup({ title: "Two" });
+    const pdf = await store.stageUpload(Buffer.from("%PDF"));
+    const s = await store.createSource(
+      { title: "Shared" },
+      { pdf: { ...pdf, name: "x.pdf", type: "application/pdf" }, groups: ["one", "two"] },
+    );
+    await store.deleteSource(s.id);
+    expect((await store.getGroup("one"))?.sources).toEqual([]);
+    expect((await store.getGroup("two"))?.sources).toEqual([]);
+    await expect(fs.stat(path.join(dir, s.pdf!))).rejects.toThrow();
+    expect(git(dir, "status", "--porcelain")).toBe("");
+  });
+
+  it("deleting a group never deletes its sources", async () => {
+    const store = await makeStore();
+    await store.createGroup({ title: "G" });
+    const s = await store.createSource({ title: "Keep me" }, { groups: ["g"] });
+    await store.deleteGroup("g");
+    expect(await store.getSource(s.id)).not.toBeNull();
+    expect(await store.getGroup("g")).toBeNull();
+  });
+
+  it("regenerating an AI summary changes only that section", async () => {
+    const store = await makeStore();
+    const s = await store.createSource({ title: "T", notes: "My notes\n\n## My heading\n\nMore" });
+    await store.setSourceAiSummary(s.id, { text: "First", model: "m1" });
+    const file = path.join(dir, s.path);
+    const before = await fs.readFile(file, "utf8");
+    tick(60);
+    await store.setSourceAiSummary(s.id, { text: "Second", model: "m2" });
+    const after = await fs.readFile(file, "utf8");
+
+    const cut = (t: string) => t.slice(t.indexOf("---\n", 4), t.indexOf("## AI summary"));
+    expect(cut(after)).toBe(cut(before));
+    expect(after).toContain("Second");
+    expect(after).not.toContain("First");
+    const summary = (await store.getSource(s.id))?.aiSummary;
+    expect(summary).toEqual({ text: "Second", model: "m2", generated: "2026-10-09T14:33:05Z" });
+  });
+
+  it("marks a group summary stale when sources change or are re-summarised", async () => {
+    const store = await makeStore();
+    await store.createGroup({ title: "G" });
+    const a = await store.createSource({ title: "A" }, { groups: ["g"] });
+    tick(60);
+    await store.setGroupAiSummary("g", { text: "Themes", model: "m" });
+    let group = (await store.getGroup("g"))!;
+    expect(store.isGroupSummaryStale(group)).toBe(false);
+
+    tick(60);
+    await store.setSourceAiSummary(a.id, { text: "New", model: "m" });
+    group = (await store.getGroup("g"))!;
+    expect(store.isGroupSummaryStale(group)).toBe(true);
+
+    tick(60);
+    await store.setGroupAiSummary("g", { text: "Themes 2", model: "m" });
+    expect(store.isGroupSummaryStale((await store.getGroup("g"))!)).toBe(false);
+
+    tick(60);
+    const b = await store.createSource({ title: "B" });
+    await store.addSourceToGroup("g", b.id);
+    expect(store.isGroupSummaryStale((await store.getGroup("g"))!)).toBe(true);
+  });
+
+  it("reorders sources and edits group notes", async () => {
+    const store = await makeStore();
+    await store.createGroup({ title: "G" });
+    const a = await store.createSource({ title: "A" }, { groups: ["g"] });
+    const b = await store.createSource({ title: "B" }, { groups: ["g"] });
+    const g = await store.setGroupSources("g", [
+      { id: b.id, note: "first now" },
+      { id: a.id, note: "" },
+    ]);
+    expect(g.sources.map((s) => s.id)).toEqual([b.id, a.id]);
+    const raw = await fs.readFile(path.join(dir, g.path), "utf8");
+    expect(raw).toContain(`sources:\n  - id: ${b.id}\n    note: first now\n  - id: ${a.id}\n`);
+    await expect(store.setGroupSources("g", [{ id: "nope", note: "" }])).rejects.toThrow(/Unknown source/);
+  });
+
+  it("rewrites only the overview, keeping the AI summary", async () => {
+    const store = await makeStore();
+    await store.createGroup({ title: "G", overview: "Old" });
+    await store.setGroupAiSummary("g", { text: "Gen", model: "m" });
+    await store.setGroupOverview("g", "New overview");
+    const g = (await store.getGroup("g"))!;
+    expect(g.overview).toBe("New overview");
+    expect(g.aiSummary?.text).toBe("Gen");
+  });
+});
+
+describe("settings", () => {
+  it("stores the research context in the body", async () => {
+    const store = await makeStore();
+    await store.setResearchContext("How can co-design...?");
+    expect((await store.getSettings()).researchContext).toBe("How can co-design...?");
+    expect(await fs.readFile(path.join(dir, "settings.md"), "utf8")).toMatch(
+      /^---\nupdated: .*\n---\nHow can co-design\.\.\.\?\n$/,
+    );
+  });
+});
+
+describe("rollback", () => {
+  it("restores files when a write fails part-way", async () => {
+    const store = await makeStore();
+    await store.createGroup({ title: "G" });
+    const s = await store.createSource({ title: "A" }, { groups: ["g"] });
+    const groupFile = await fs.readFile(path.join(dir, "groups/g.md"), "utf8");
+    const head = await store.git.headCommit();
+
+    // deleteSource rewrites the group first, then fails removing the source.
+    const realRm = fs.rm;
+    const spy = vi.spyOn(fs, "rm").mockImplementation(async (p, opts) => {
+      if (String(p).endsWith(`${s.id}.md`)) throw new Error("disk on fire");
+      return realRm(p, opts);
+    });
+    try {
+      await expect(store.deleteSource(s.id)).rejects.toThrow("disk on fire");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await fs.readFile(path.join(dir, "groups/g.md"), "utf8")).toBe(groupFile);
+    expect(await store.git.headCommit()).toBe(head);
+    expect(git(dir, "status", "--porcelain")).toBe("");
+    expect((await store.getGroup("g"))?.sources).toHaveLength(1);
+  });
+});
+
+describe("sync", () => {
+  async function withRemote() {
+    const remote = path.join(root, "remote.git");
+    git(root, "init", "--bare", "--initial-branch=main", remote);
+    const store = await makeStore({ remote, pushDelayMs: 50 });
+    return { remote, store };
+  }
+
+  it("pushes after the debounce delay", async () => {
+    const { remote, store } = await withRemote();
+    await store.createJournalEntry({ body: "to GitHub" });
+    expect(["pending", "syncing"]).toContain(store.syncStatus().state);
+    await waitFor(() => store.syncStatus().state === "synced");
+    expect(git(remote, "log", "-1", "--format=%s", "main")).toBe("journal: add entry 2026-10-09 15:32");
+  });
+
+  it("rebases onto remote changes before pushing", async () => {
+    const { remote, store } = await withRemote();
+    await store.syncNow();
+    const other = path.join(root, "other");
+    git(root, "clone", remote, other);
+    await fs.mkdir(path.join(other, "sources"), { recursive: true });
+    await fs.writeFile(path.join(other, "sources", "elsewhere.md"), "---\ntitle: Elsewhere\n---\n");
+    git(other, "add", "-A");
+    git(other, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-m", "edit elsewhere");
+    git(other, "push", "origin", "main");
+
+    await store.createJournalEntry({ body: "local" });
+    const status = await store.syncNow();
+    expect(status.state).toBe("synced");
+    expect((await store.getSource("elsewhere"))?.title).toBe("Elsewhere");
+    expect(git(remote, "log", "--format=%s", "main").split("\n")).toContain("edit elsewhere");
+  });
+
+  it("stops on a conflict without overwriting anything", async () => {
+    const { remote, store } = await withRemote();
+    await store.setResearchContext("Original");
+    await store.syncNow();
+
+    const other = path.join(root, "other");
+    git(root, "clone", remote, other);
+    await fs.writeFile(path.join(other, "settings.md"), "---\n---\nRemote version\n");
+    git(other, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-am", "remote edit");
+    git(other, "push", "origin", "main");
+
+    await store.setResearchContext("Local version");
+    const status = await store.syncNow();
+    expect(status.state).toBe("error");
+    expect(status.conflicts).toEqual(["settings.md"]);
+    expect((await store.getSettings()).researchContext).toBe("Local version");
+    expect(git(dir, "status", "--porcelain")).toBe("");
+    expect(git(remote, "log", "-1", "--format=%s", "main")).toBe("remote edit");
+  });
+});
+
+async function waitFor(check: () => boolean, timeoutMs = 10_000) {
+  const start = Date.now();
+  while (!check()) {
+    if (Date.now() - start > timeoutMs) throw new Error("timed out");
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
