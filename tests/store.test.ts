@@ -339,6 +339,24 @@ describe("sources and groups", () => {
     await expect(store.setGroupSources("g", [{ id: "nope", note: "" }])).rejects.toThrow(/Unknown source/);
   });
 
+  it("edits one group note and keeps refs to sources deleted by hand", async () => {
+    const store = await makeStore();
+    await store.createGroup({ title: "G" });
+    const a = await store.createSource({ title: "A" }, { groups: ["g"] });
+    const b = await store.createSource({ title: "B" }, { groups: ["g"] });
+    await store.setGroupSourceNote("g", a.id, "Why A");
+    expect((await store.getGroup("g"))?.sources).toEqual([
+      { id: a.id, note: "Why A" },
+      { id: b.id, note: "" },
+    ]);
+    await fs.rm(path.join(dir, b.path));
+    const g = await store.setGroupSources("g", [
+      { id: b.id, note: "" },
+      { id: a.id, note: "Why A" },
+    ]);
+    expect(g.sources.map((s) => s.id)).toEqual([b.id, a.id]);
+  });
+
   it("rewrites only the overview, keeping the AI summary", async () => {
     const store = await makeStore();
     await store.createGroup({ title: "G", overview: "Old" });

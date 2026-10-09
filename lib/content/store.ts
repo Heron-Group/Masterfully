@@ -771,7 +771,12 @@ export class ContentStore {
       const clean: GroupSourceRef[] = [];
       for (const ref of refs) {
         if (seen.has(ref.id)) continue;
-        if (!this.sources.has(ref.id)) throw new ContentError(`Unknown source: ${ref.id}`, 400);
+        // A reference already in the group may point at a source deleted by
+        // hand; keep it rather than refusing every edit to the group.
+        const alreadyHere = group.sources.some((s) => s.id === ref.id);
+        if (!this.sources.has(ref.id) && !alreadyHere) {
+          throw new ContentError(`Unknown source: ${ref.id}`, 400);
+        }
         seen.add(ref.id);
         clean.push({ id: ref.id, note: (ref.note ?? "").trim() });
       }
@@ -783,6 +788,20 @@ export class ContentStore {
         sources: clean,
         sourcesChanged: membershipChanged ? this.stamp() : group.sourcesChanged,
       });
+  }
+
+  /** Change the group-specific note for one source. */
+  async setGroupSourceNote(groupId: string, sourceId: string, note: string): Promise<Group> {
+    return this.write(`group: update note on ${sourceId} in ${groupId}`, async (tx) => {
+      const group = this.requireGroup(groupId);
+      if (!group.sources.some((s) => s.id === sourceId)) {
+        throw new ContentError("That source isn't in this group", 404);
+      }
+      return this.writeGroup(tx, {
+        ...group,
+        sources: group.sources.map((s) => (s.id === sourceId ? { ...s, note: note.trim() } : s)),
+      });
+    });
   }
 
   /** Rewrite only the `## AI summary` section. */

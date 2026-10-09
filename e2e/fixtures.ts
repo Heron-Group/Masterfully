@@ -38,6 +38,13 @@ export function handWrite(rel: string, text: string) {
   writeFileSync(path.join(CONTENT_DIR, rel), text);
 }
 
+/** Remove a hand-written file and commit, leaving the content repo clean. */
 export function handRemove(rel: string) {
   rmSync(path.join(CONTENT_DIR, rel), { force: true });
+  git("add", "-A", "--", rel);
+  try {
+    git("-c", "user.name=E2E", "-c", "user.email=e2e@localhost", "commit", "-q", "-m", `e2e: remove ${rel}`);
+  } catch {
+    // Nothing to commit (the file was never committed).
+  }
 }

@@ -74,3 +74,25 @@ export function formatAuthors(authors: string[]): string {
   if (authors.length <= 3) return authors.join("; ");
   return `${authors.slice(0, 3).join("; ")} et al.`;
 }
+
+export type GroupSourceDto = {
+  id: string;
+  note: string;
+  /** Null when the referenced source file no longer exists. */
+  source: Pick<SourceDto, "id" | "title" | "authors" | "year" | "type" | "notes" | "aiSummary"> | null;
+};
+
+export type GroupDto = {
+  id: string;
+  title: string;
+  created: string;
+  updated: string;
+  overview: string;
+  aiSummary: AiSummaryDto | null;
+  /** Sources changed or were re-summarised after the AI summary was generated. */
+  summaryStale: boolean;
+  sources: GroupSourceDto[];
+  problem?: string;
+};
+
+export type GroupListItemDto = { id: string; title: string; updated: string; count: number };

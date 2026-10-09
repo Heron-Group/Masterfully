@@ -42,7 +42,7 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   await page.locator('input[type="file"]').setInputFiles({
     name: "paper.pdf",
     mimeType: "application/pdf",
-    buffer: makePdf(40 * 1024 * 1024, "Forty megabytes"),
+    buffer: makePdf(40 * 1024 * 1024, `Forty megabytes ${stamp}`),
   });
   await page.getByPlaceholder(/Your notes/).fill("First **impressions**.");
   await page.getByLabel(`E2E Group ${stamp}`).check();

@@ -1,7 +1,8 @@
 import "server-only";
 import { ContentError } from "./content";
 import type { Group, JournalEntry, Source } from "./content";
-import { fileUrl, IMAGE_TYPES, type EntryDto, type SourceDto } from "./dto";
+import { fileUrl, IMAGE_TYPES, type EntryDto, type GroupDto, type SourceDto } from "./dto";
+import type { ContentStore } from "./content/store";
 
 export function entryToDto(e: JournalEntry): EntryDto {
   return {
@@ -54,5 +55,31 @@ export function sourceToDto(s: Source, groups: Group[]): SourceDto {
     groups: groups
       .filter((g) => g.sources.some((ref) => ref.id === s.id))
       .map((g) => ({ id: g.id, title: g.title })),
+  };
+}
+
+export async function groupToDto(g: Group, store: ContentStore): Promise<GroupDto> {
+  const sources = await Promise.all(
+    g.sources.map(async (ref) => {
+      const s = await store.getSource(ref.id);
+      return {
+        id: ref.id,
+        note: ref.note,
+        source: s
+          ? { id: s.id, title: s.title, authors: s.authors, year: s.year, type: s.type, notes: s.notes, aiSummary: s.aiSummary }
+          : null,
+      };
+    }),
+  );
+  return {
+    id: g.id,
+    title: g.title,
+    created: g.created,
+    updated: g.updated,
+    overview: g.overview,
+    aiSummary: g.aiSummary,
+    summaryStale: store.isGroupSummaryStale(g),
+    sources,
+    problem: g.problem,
   };
 }
