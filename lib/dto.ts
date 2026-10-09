@@ -96,3 +96,12 @@ export type GroupDto = {
 };
 
 export type GroupListItemDto = { id: string; title: string; updated: string; count: number };
+
+/** Events streamed (as NDJSON) while an AI summary is generated. */
+export type AiEvent =
+  | { type: "notice"; message: string }
+  | { type: "delta"; text: string }
+  /** Discard text streamed so far (a fallback model took over). */
+  | { type: "reset"; message: string }
+  | { type: "done"; summary: AiSummaryDto; warning?: string }
+  | { type: "error"; message: string; code?: "url_unavailable" | "not_configured" | "refusal" | "api" | "not_found" };
