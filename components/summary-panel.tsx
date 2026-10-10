@@ -162,7 +162,7 @@ export function SummaryPanel({
           <Markdown className="text-[16px]">{summary.text}</Markdown>
         </AiBox>
       ) : (
-        run.state === "idle" && <p className="text-sm text-muted">{emptyHint}</p>
+        <div className="rounded-lg bg-accent-soft/50 px-5 py-4 text-sm text-muted">{emptyHint}</div>
       )}
     </section>
   );

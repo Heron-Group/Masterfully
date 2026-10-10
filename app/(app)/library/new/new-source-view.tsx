@@ -8,6 +8,7 @@ import {
   InlineSelectText,
   InlineTitle,
 } from "@/components/inline-fields";
+import { GroupTags } from "@/components/group-tags";
 import { LiveEditor } from "@/components/live-editor/live-editor";
 import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
 import { ui } from "@/components/ui";
@@ -25,6 +26,7 @@ import {
   updateSourceProps,
   type SourceProps,
 } from "../actions";
+import { createGroup } from "../../groups/actions";
 
 const iconButton =
   "rounded-md p-1.5 text-muted transition-colors hover:bg-accent-soft hover:text-ink";
@@ -52,6 +54,7 @@ export function NewSourceView({
   const [inGroups, setInGroups] = useState<string[]>(
     preselectedGroup ? [preselectedGroup] : [],
   );
+  const [allGroups, setAllGroups] = useState(groups);
   const notes = useRef("");
   const [creating, setCreating] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -196,6 +199,30 @@ export function NewSourceView({
             {status}
           </span>
         </div>
+        <div className="mt-2.5">
+          <GroupTags
+            selected={allGroups.filter((g) => inGroups.includes(g.id))}
+            all={allGroups}
+            linkTags={false}
+            onAdd={(gid) => {
+              setInGroups((l) => [...l, gid]);
+              void persist((sid) => setSourceInGroup(sid, gid, true));
+            }}
+            onRemove={(gid) => {
+              setInGroups((l) => l.filter((x) => x !== gid));
+              void persist((sid) => setSourceInGroup(sid, gid, false));
+            }}
+            onCreate={(title) => {
+              void (async () => {
+                const r = await createGroup(title);
+                if (!r.ok) return setError(r.error);
+                setAllGroups((l) => [...l, { id: r.id, title }]);
+                setInGroups((l) => [...l, r.id]);
+                void persist((sid) => setSourceInGroup(sid, r.id, true));
+              })();
+            }}
+          />
+        </div>
       </header>
 
       <section aria-labelledby="material-heading">
@@ -243,63 +270,6 @@ export function NewSourceView({
         />
       </section>
 
-      <section aria-labelledby="groups-heading">
-        <h2 id="groups-heading" className={`${ui.h2} mb-3`}>
-          Reading groups
-        </h2>
-        {inGroups.length > 0 && (
-          <ul className="mb-3 flex flex-wrap gap-2">
-            {inGroups.map((id) => {
-              const g = groups.find((x) => x.id === id);
-              return (
-                <li
-                  key={id}
-                  className="flex items-center rounded-full bg-accent-soft/70 text-sm"
-                >
-                  <span className="py-1 pl-3 pr-1">{g?.title ?? id}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInGroups((l) => l.filter((x) => x !== id));
-                      void persist((sid) => setSourceInGroup(sid, id, false));
-                    }}
-                    aria-label={`Remove from ${g?.title ?? id}`}
-                    className="rounded-full px-2 py-1 text-muted hover:text-danger"
-                  >
-                    ×
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {groups.some((g) => !inGroups.includes(g.id)) ? (
-          <select
-            value=""
-            onChange={(e) => {
-              const gid = e.target.value;
-              if (!gid) return;
-              setInGroups((l) => [...l, gid]);
-              void persist((sid) => setSourceInGroup(sid, gid, true));
-            }}
-            aria-label="Add to a group"
-            className={`${ui.input} max-w-xs`}
-          >
-            <option value="">Add to a group…</option>
-            {groups
-              .filter((g) => !inGroups.includes(g.id))
-              .map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.title}
-                </option>
-              ))}
-          </select>
-        ) : (
-          !groups.length && (
-            <p className="text-sm text-muted">No reading groups yet.</p>
-          )
-        )}
-      </section>
     </article>
   );
 }

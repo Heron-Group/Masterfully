@@ -3,6 +3,15 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { CONTENT_DIR, git, handRemove, handWrite, pdfFile } from "./fixtures";
 
+/** Add the open source to a group with the tag list. */
+async function addToGroup(page: import("@playwright/test").Page, name: string) {
+  await page.getByRole("button", { name: "Add to group" }).click();
+  await page.getByLabel("Find a group").fill(name);
+  await page.getByRole("option", { name }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("group", { name: "Reading groups" }).getByText(name)).toBeVisible();
+}
+
 const read = (rel: string) => readFileSync(path.join(CONTENT_DIR, rel), "utf8");
 import { setEditorText, signIn } from "./helpers";
 
@@ -19,6 +28,7 @@ test.beforeAll(() => {
 
 test.afterAll(async ({ browser }, testInfo) => {
   testInfo.setTimeout(180_000);
+  handRemove(`groups/e2e-tag-group-${stamp}.md`);
   handRemove(`groups/${GROUP}.md`);
   const page = await browser.newPage();
   await signIn(page, "/library");
@@ -53,7 +63,7 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   await page.getByLabel("Link", { exact: true }).press("Enter");
   await page.locator('input[type="file"]').setInputFiles(pdfFile(40 * 1024 * 1024, `Forty megabytes ${stamp}`));
   await setEditorText(page, page.getByRole("textbox", { name: "My notes" }), "First **impressions**.");
-  await page.getByLabel("Add to a group").selectOption(GROUP);
+  await addToGroup(page, `E2E Group ${stamp}`);
   const title = page.getByLabel("Title", { exact: true });
   await title.fill(TITLE);
   await title.press("Enter");
@@ -132,8 +142,19 @@ test("edit details, leave and rejoin a group", async ({ page }) => {
   await expect.poll(() => read(`sources/${id}.md`)).toContain(`title: ${TITLE} (revised)`);
 
   await page.getByRole("button", { name: `Remove from E2E Group ${stamp}` }).click();
-  await expect(page.getByText("Not in any group yet.")).toBeVisible();
-  await page.getByLabel("Add to a group").selectOption(GROUP);
+  await expect(page.getByRole("link", { name: `E2E Group ${stamp}` })).toHaveCount(0);
+  await expect.poll(() => read(`groups/${GROUP}.md`)).not.toContain(id);
+  await addToGroup(page, `E2E Group ${stamp}`);
+  await expect.poll(() => read(`groups/${GROUP}.md`)).toContain(id);
+
+  // Tags: create a second group from the list; the source is in both.
+  await page.getByRole("button", { name: "Add to group" }).click();
+  await page.getByLabel("Find a group").fill(`E2E Tag group ${stamp}`);
+  await page.getByRole("button", { name: `Create “E2E Tag group ${stamp}”` }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("link", { name: `E2E Tag group ${stamp}` })).toBeVisible();
+  await expect.poll(() => read(`groups/e2e-tag-group-${stamp}.md`)).toContain(`- id: ${id}`);
+  expect(read(`groups/${GROUP}.md`)).toContain(`- id: ${id}`);
   await expect(page.getByRole("link", { name: `E2E Group ${stamp}` })).toBeVisible();
 });
 
@@ -147,7 +168,9 @@ test("delete a source removes its PDF and group membership", async ({ page }) =>
   await page.waitForURL("**/library");
   await expect(page.getByRole("link", { name: new RegExp(`^${TITLE}`) })).toHaveCount(0);
   const files = git("show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort();
-  expect(files).toEqual([`attachments/sources/${id}.pdf`, `groups/${GROUP}.md`, `sources/${id}.md`].sort());
+  expect(files).toEqual(
+    [`attachments/sources/${id}.pdf`, `groups/${GROUP}.md`, `groups/e2e-tag-group-${stamp}.md`, `sources/${id}.md`].sort(),
+  );
 });
 
 test("signed out, sources and PDFs are unreachable", async ({ request }) => {

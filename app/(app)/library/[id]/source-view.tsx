@@ -1,9 +1,10 @@
 "use client";
 
-import { BookOpen, Download, ExternalLink, FilePlus2, FileText, Globe, Link2, Pencil, Trash2, X } from "lucide-react";
+import { BookOpen, Download, FilePlus2, FileText, Globe, Link2, Pencil, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 import { InlineAutoText, InlineSelectText, InlineTitle, useInlineSave } from "@/components/inline-fields";
+import { GroupTags } from "@/components/group-tags";
 import { LiveEditor } from "@/components/live-editor/live-editor";
 import { ReaderPanel, type ReaderTab } from "@/components/reader-panel";
 import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
@@ -13,6 +14,7 @@ import { MAX_UPLOAD_BYTES, SOURCE_TYPE_OPTIONS, type GroupRefDto, type SourceDto
 import { formatShortDate } from "@/lib/time";
 import { upload } from "@/lib/upload-client";
 import { deleteSource, removeSourcePdf, saveSourceNotes, setSourceInGroup, updateSourceProps, type ActionResult, type SourceProps } from "../actions";
+import { createGroup } from "../../groups/actions";
 import { SourceSummaryPanel } from "./source-summary";
 
 function changed() {
@@ -71,11 +73,10 @@ export function SourceView({
   return (
     <>
       <article className="mt-4 space-y-10">
-        <Details source={source} />
+        <Details source={source} allGroups={allGroups} />
         <MaterialSection source={source} reading={open} onRead={setReading} />
         <NotesSection source={source} />
         <SourceSummaryPanel source={source} />
-        <GroupsSection source={source} allGroups={allGroups} />
       </article>
       {open && <ReaderPanel title={source.title} tabs={tabs} active={open} onTab={setReading} onClose={close} />}
     </>
@@ -92,7 +93,7 @@ function ErrorText({ result }: { result: ActionResult | null }) {
 }
 
 /** Title, then one quiet line of details (edited in place) with delete. */
-function Details({ source }: { source: SourceDto }) {
+function Details({ source, allGroups }: { source: SourceDto; allGroups: GroupRefDto[] }) {
   const { save, label, isError } = useInlineSave();
   const update = (props: SourceProps) =>
     save(async () => {
@@ -139,12 +140,75 @@ function Details({ source }: { source: SourceDto }) {
           <DeleteControl source={source} />
         </span>
       </div>
+      <div className="mt-2.5">
+        <SourceGroupTags source={source} allGroups={allGroups} />
+      </div>
       {label && (
         <p role={isError ? "alert" : "status"} className={`mt-1 text-xs ${isError ? "text-danger" : "text-faint"}`}>
           {label}
         </p>
       )}
     </header>
+  );
+}
+
+/** The source's reading groups as tags; changes show at once and save in the background. */
+function SourceGroupTags({ source, allGroups }: { source: SourceDto; allGroups: GroupRefDto[] }) {
+  const [groups, setGroups] = useState(allGroups);
+  const [selected, setSelected] = useState(source.groups);
+  const [prev, setPrev] = useState({ source: source.groups, all: allGroups });
+  if (prev.source !== source.groups || prev.all !== allGroups) {
+    // The server sent fresh data (after a save): follow it.
+    setPrev({ source: source.groups, all: allGroups });
+    setSelected(source.groups);
+    setGroups(allGroups);
+  }
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(change: () => Promise<ActionResult>, undo: () => void) {
+    setError(null);
+    const r = await change();
+    if (r.ok) changed();
+    else {
+      undo();
+      setError(r.error);
+    }
+  }
+
+  return (
+    <>
+      <GroupTags
+        selected={selected}
+        all={groups}
+        onAdd={(id) => {
+          const g = groups.find((x) => x.id === id);
+          if (!g) return;
+          setSelected((l) => [...l, g]);
+          void save(() => setSourceInGroup(source.id, id, true), () => setSelected((l) => l.filter((x) => x.id !== id)));
+        }}
+        onRemove={(id) => {
+          const before = selected;
+          setSelected((l) => l.filter((x) => x.id !== id));
+          void save(() => setSourceInGroup(source.id, id, false), () => setSelected(before));
+        }}
+        onCreate={(title) => {
+          void (async () => {
+            setError(null);
+            const r = await createGroup(title);
+            if (!r.ok) return setError(r.error);
+            const g = { id: r.id, title };
+            setGroups((l) => [...l, g]);
+            setSelected((l) => [...l, g]);
+            await save(() => setSourceInGroup(source.id, r.id, true), () => setSelected((l) => l.filter((x) => x.id !== r.id)));
+          })();
+        }}
+      />
+      {error && (
+        <p role="alert" className="mt-1 text-xs text-danger">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -301,16 +365,9 @@ function PdfRow({ source, reading, onRead }: { source: SourceDto; reading: ReadK
           </button>
           <div className="flex items-center gap-0.5">
             <ReadButton kind="pdf" label="PDF" reading={reading} onRead={onRead} />
-            <a href={source.pdf.url} target="_blank" rel="noopener" className={iconButton} title="Open in a new tab" aria-label="Open the PDF in a new tab">
-              <ExternalLink size={15} aria-hidden="true" />
-            </a>
             <a href={source.pdf.downloadUrl} className={iconButton} title="Download" aria-label="Download the PDF">
               <Download size={15} aria-hidden="true" />
             </a>
-            <label className={`${iconButton} cursor-pointer`} title="Replace PDF" aria-label="Replace PDF">
-              <FilePlus2 size={15} aria-hidden="true" />
-              {fileInput}
-            </label>
             <button type="button" onClick={() => setConfirmRemove(true)} className={iconButton} title="Remove PDF" aria-label="Remove PDF">
               <X size={15} aria-hidden="true" />
             </button>
@@ -495,68 +552,6 @@ function NotesSection({ source }: { source: SourceDto }) {
         ariaLabel="My notes"
         className="min-h-24"
       />
-    </section>
-  );
-}
-
-function GroupsSection({ source, allGroups }: { source: SourceDto; allGroups: GroupRefDto[] }) {
-  const [result, setResult] = useState<ActionResult | null>(null);
-  const [pending, start] = useTransition();
-  const memberIds = new Set(source.groups.map((g) => g.id));
-  const available = allGroups.filter((g) => !memberIds.has(g.id));
-
-  function toggle(groupId: string, member: boolean) {
-    start(async () => {
-      const r = await setSourceInGroup(source.id, groupId, member);
-      setResult(r);
-      if (r.ok) changed();
-    });
-  }
-
-  return (
-    <section aria-labelledby="groups-heading">
-      <h2 id="groups-heading" className={`${ui.h2} mb-3`}>
-        Reading groups
-      </h2>
-      {source.groups.length ? (
-        <ul className="mb-3 flex flex-wrap gap-2">
-          {source.groups.map((g) => (
-            <li key={g.id} className="flex items-center rounded-full bg-accent-soft/70 text-sm">
-              <a href={`/groups/${g.id}`} className="py-1 pl-3 pr-1 hover:underline">
-                {g.title}
-              </a>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => toggle(g.id, false)}
-                aria-label={`Remove from ${g.title}`}
-                className="rounded-full px-2 py-1 text-muted hover:text-danger"
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mb-3 text-sm text-muted">Not in any group yet.</p>
-      )}
-      {available.length > 0 && (
-        <select
-          value=""
-          disabled={pending}
-          onChange={(e) => e.target.value && toggle(e.target.value, true)}
-          aria-label="Add to a group"
-          className={`${ui.input} max-w-xs`}
-        >
-          <option value="">Add to a group…</option>
-          {available.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.title}
-            </option>
-          ))}
-        </select>
-      )}
-      <ErrorText result={result} />
     </section>
   );
 }
