@@ -12,7 +12,7 @@ const read = (rel: string) => readFileSync(workspace(rel), "utf8");
 test("source summary streams in, is labelled, and changes only the AI section", async ({ page }) => {
   const before = read("sources/ingold-2013-making.md");
   await signIn(page, "/library/ingold-2013-making");
-  await page.getByRole("button", { name: /^Summarise$|Regenerate summary/ }).click();
+  await page.getByRole("button", { name: /^(Summarise|Resummarise)$/ }).click();
   await expect(page.getByText("AI-generated · writing…")).toBeVisible();
   await expect(page.getByText(/AI-generated \d+ \w+ \d{4} · fake-model/)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/simulated summary of/i)).toBeVisible();
@@ -26,7 +26,7 @@ test("group summary is marked stale after a member is re-summarised", async ({ p
   const groupGeneratedAt = () => read("groups/co-design-foundations.md").match(/generated: (\S+);/)?.[1];
   const groupBefore = groupGeneratedAt();
   await signIn(page, "/groups/co-design-foundations");
-  await page.getByRole("button", { name: /^Summarise$|Regenerate summary/ }).click();
+  await page.getByRole("button", { name: /^(Summarise|Resummarise)$/ }).click();
   // Wait for the new group summary to be saved (an older one may be showing).
   await expect.poll(groupGeneratedAt, { timeout: 30_000 }).not.toBe(groupBefore);
   await expect(page.getByText(/AI-generated \d+ \w+ \d{4} · fake-model/)).toBeVisible({ timeout: 15_000 });
@@ -42,7 +42,7 @@ test("group summary is marked stale after a member is re-summarised", async ({ p
   const before = generatedAt();
   await page.goto(`/library/${member}`);
   await page.waitForLoadState("networkidle"); // a click before hydration does nothing
-  await page.getByRole("button", { name: /^Summarise$|Regenerate summary/ }).click();
+  await page.getByRole("button", { name: /^(Summarise|Resummarise)$/ }).click();
   const fallback = page.getByRole("button", { name: "Summarise from details and notes only" });
   // An earlier summary stays on screen while the new one is written, so wait
   // for the new one to reach the file, taking the details-only route when
