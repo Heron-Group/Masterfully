@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { signInWith } from "@/lib/auth";
 import { callbackUrl, enabledProviders, finishAuthorization, type ProviderId } from "@/lib/auth/oauth";
-import { OAUTH_COOKIE, safeNext } from "@/lib/auth/redirects";
+import { OAUTH_COOKIE, publicUrl, safeNext } from "@/lib/auth/redirects";
 
 type Pending = { provider: string; state: string; verifier: string; next: string };
 
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/auth/[pr
   const { provider } = await ctx.params;
   const params = request.nextUrl.searchParams;
   const fail = (error: string) => {
-    const res = NextResponse.redirect(new URL(`/login?error=${error}`, request.url));
+    const res = NextResponse.redirect(publicUrl(`/login?error=${error}`, request));
     res.cookies.delete({ name: OAUTH_COOKIE, path: "/api/auth" });
     return res;
   };
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/auth/[pr
   try {
     const { identity, name } = await finishAuthorization(
       provider as ProviderId,
-      callbackUrl(provider as ProviderId, request.url),
+      callbackUrl(provider as ProviderId, request),
       code,
       pending.verifier,
     );
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/auth/[pr
     console.error(`[auth] ${provider} sign-in failed:`, err);
     return fail("failed");
   }
-  const res = NextResponse.redirect(new URL(safeNext(pending.next), request.url));
+  const res = NextResponse.redirect(publicUrl(safeNext(pending.next), request));
   res.cookies.delete({ name: OAUTH_COOKIE, path: "/api/auth" });
   return res;
 }

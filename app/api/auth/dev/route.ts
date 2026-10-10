@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { signInWith } from "@/lib/auth";
-import { devLoginEnabled, safeNext } from "@/lib/auth/redirects";
+import { devLoginEnabled, publicUrl, safeNext } from "@/lib/auth/redirects";
 
 /**
  * Development and tests only (AUTH_DEV_LOGIN=1, never in production): sign
@@ -13,5 +13,5 @@ export async function GET(request: NextRequest) {
   const email = params.get("email")?.trim().toLowerCase() ?? "";
   if (!/^[^@\s]+@[^@\s]+$/.test(email)) return new Response("Pass ?email=", { status: 400 });
   await signInWith({ provider: "dev", subject: email, email, emailVerified: true }, { name: params.get("name") ?? undefined });
-  return NextResponse.redirect(new URL(safeNext(params.get("next")), request.url));
+  return NextResponse.redirect(publicUrl(safeNext(params.get("next")), request));
 }

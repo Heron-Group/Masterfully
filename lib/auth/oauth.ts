@@ -1,7 +1,7 @@
 import "server-only";
 import { decodeIdToken, generateCodeVerifier, generateState, Google, MicrosoftEntraId } from "arctic";
 import type { Identity } from "../accounts";
-import { serverConfig } from "../config";
+import { publicUrl } from "./redirects";
 
 /**
  * Google and Microsoft sign-in (OAuth 2.0 with PKCE, OpenID Connect).
@@ -23,9 +23,8 @@ export function enabledProviders(): ProviderId[] {
   return out;
 }
 
-export function callbackUrl(provider: ProviderId, requestUrl: string): string {
-  const base = serverConfig().appUrl ?? new URL(requestUrl).origin;
-  return `${base}/api/auth/${provider}/callback`;
+export function callbackUrl(provider: ProviderId, request: Request): string {
+  return publicUrl(`/api/auth/${provider}/callback`, request).toString();
 }
 
 function client(provider: ProviderId, redirectUri: string) {
