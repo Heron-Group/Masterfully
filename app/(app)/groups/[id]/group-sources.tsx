@@ -17,6 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { FilePlus2, Library } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState, useTransition } from "react";
 import { Markdown } from "@/components/markdown";
@@ -64,15 +65,17 @@ export function GroupSources({ group, library }: { group: GroupDto; library: Lib
 
   return (
     <section aria-labelledby="sources-heading">
-      <div className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-2">
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <h2 id="sources-heading" className={ui.h2}>
           Sources <span className="tabular-nums">({items.length})</span>
         </h2>
         <div className="ml-auto flex gap-2">
-          <button type="button" onClick={() => setPicking((p) => !p)} aria-expanded={picking} className={ui.btnSecondary}>
+          <button type="button" onClick={() => setPicking((p) => !p)} aria-expanded={picking} className={ui.btnAction}>
+            <Library size={14} strokeWidth={1.7} aria-hidden="true" />
             Add from library
           </button>
-          <Link href={`/library/new?group=${encodeURIComponent(group.id)}`} className={ui.btnSecondary}>
+          <Link href={`/library/new?group=${encodeURIComponent(group.id)}`} className={ui.btnAction}>
+            <FilePlus2 size={14} strokeWidth={1.7} aria-hidden="true" />
             New source
           </Link>
         </div>

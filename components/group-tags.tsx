@@ -4,6 +4,7 @@ import { Check, Plus, SquareStack, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GroupRefDto } from "@/lib/dto";
+import { ui } from "./ui";
 
 function fold(text: string) {
   return text.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -106,9 +107,9 @@ export function GroupTags({
           }}
           aria-expanded={open}
           aria-haspopup="listbox"
-          className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[13px] text-faint transition-colors hover:bg-accent-soft/70 hover:text-ink"
+          className={ui.btnAction}
         >
-          <Plus size={13} aria-hidden="true" />
+          <Plus size={14} strokeWidth={1.7} aria-hidden="true" />
           Add to group
         </button>
         {open && (

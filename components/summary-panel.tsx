@@ -1,5 +1,6 @@
 "use client";
 
+import { Sparkles, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import type { AiEvent, AiSummaryDto } from "@/lib/dto";
@@ -111,11 +112,13 @@ export function SummaryPanel({
         </h2>
         <div className="ml-auto flex gap-2">
           {running ? (
-            <button type="button" onClick={() => { abort.current?.abort(); setRun({ state: "idle" }); }} className={ui.btnGhost}>
+            <button type="button" onClick={() => { abort.current?.abort(); setRun({ state: "idle" }); }} className={ui.btnAction}>
+              <Square size={13} strokeWidth={1.7} aria-hidden="true" />
               Stop
             </button>
           ) : (
-            <button type="button" onClick={() => void generate()} className={ui.btnSecondary}>
+            <button type="button" onClick={() => void generate()} className={ui.btnAction}>
+              <Sparkles size={14} strokeWidth={1.7} aria-hidden="true" />
               {summary ? "Regenerate summary" : "Generate summary"}
             </button>
           )}
