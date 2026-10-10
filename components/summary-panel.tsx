@@ -7,7 +7,7 @@ import { useRef, useState } from "react";
 import type { AiEvent, AiSummaryDto } from "@/lib/dto";
 import { formatShortDate } from "@/lib/time";
 import { Markdown } from "./markdown";
-import { CONTENT_CHANGED_EVENT } from "./sync-status";
+import { CONTENT_CHANGED_EVENT } from "./content-events";
 import { ui } from "./ui";
 
 type Run =

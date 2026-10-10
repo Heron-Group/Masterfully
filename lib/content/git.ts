@@ -244,6 +244,10 @@ export class GitSync {
             : redact(errorMessage(err)),
         conflicts: err instanceof ConflictError ? err.conflicts : undefined,
       };
+      // The interface doesn't show backup status, so the server log is where this is seen.
+      console.error(
+        `[backup] push to GitHub failed: ${this.status.error}${this.status.conflicts?.length ? `\n  conflicting files: ${this.status.conflicts.join(", ")}` : ""}`,
+      );
     }
     this.status.ahead = await this.countAhead();
     if (this.status.state === "synced" && this.status.ahead > 0) this.status.state = "pending";

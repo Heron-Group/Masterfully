@@ -5,7 +5,7 @@ import { Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { InlineTitle, useInlineSave } from "@/components/inline-fields";
 import { LiveEditor } from "@/components/live-editor/live-editor";
-import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
+import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
 import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
 import type { GroupDto } from "@/lib/dto";

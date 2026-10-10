@@ -141,14 +141,14 @@ the repository; they are encrypted in `SECRETS_DIR`.
 
 Users can download everything in their workspace as a zip (Markdown files and
 attachments) from **Settings → Your data**. The app's interface doesn't
-mention Git; backups show only as the status at the bottom of the sidebar.
+mention Git or show backup status; check backups in the server log or on GitHub.
 
 How the app treats it:
 
 - **One commit per change**, with a readable message such as
   `journal: add entry 2026-10-09 15:32` or `source: update notes brody-2025-graphic-language`.
-- **Push about 60 seconds after the last change.** The header shows the status
-  (backed up, pending, or failed with the error) and has a **Sync now** button.
+- **Push about 60 seconds after the last change.** Push errors are written to
+  the server log (the app's interface doesn't show backup status).
 - Before each push it **pulls with rebase**, so edits you pushed from another
   computer are picked up. If they conflict with changes on the server, it stops,
   leaves every file as it was, and lists the conflicting files. Nothing is
@@ -191,7 +191,8 @@ the folder in Obsidian or a text editor.
   clones the repo.
 - **Undo a change.** In a clone, find the commit (`git log -- sources/<id>.md`),
   run `git revert <commit>` or check out an old version of the file, commit and
-  push. On the server, press **Sync now** to pull it in.
+  push. The server pulls it in before its next backup (after the next change
+  made in the app).
 - **Corrupted or confusing server copy.** Stop the app, rename the folder
   (`mv research-content research-content.old`), start the app to get a fresh
   clone, then delete the old folder once you're happy.
@@ -283,7 +284,7 @@ in the code folder.
 - Open `https://research.example.com`. You should see the sign-in page with
   the Google and Microsoft buttons.
 - Sign in, post a journal entry, and within about a minute it appears in the
-  GitHub repo. The header dot turns green ("Backed up").
+  GitHub repo.
 - Signed out, `https://research.example.com/api/journal` returns 401.
 
 ---
@@ -398,12 +399,12 @@ sources (IDs are stable filenames).
 
 ## Troubleshooting
 
-**"Backup failed" with a conflict.** Something changed the same file on GitHub
+**`[backup] push to GitHub failed` in the server log, with conflicting files.** Something changed the same file on GitHub
 and on the server. Over SSH: `cd $CONTENT_DIR && git status`, then
 `git pull --rebase`, fix the listed files, `git add` them and
-`git rebase --continue`. Then press **Sync now**.
+`git rebase --continue`. The app pushes again after the next change.
 
-**"Backup failed" with a permission or host-key error.** Check the deploy key
+**`[backup] push to GitHub failed` with a permission or host-key error.** Check the deploy key
 has write access and `GIT_SSH_KEY_PATH` is right. Test with
 `GIT_SSH_COMMAND="ssh -i $GIT_SSH_KEY_PATH" git -C $CONTENT_DIR push`.
 

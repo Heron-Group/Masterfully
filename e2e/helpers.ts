@@ -17,6 +17,7 @@ export async function signIn(page: Page, next = "/journal", email = OWNER_EMAIL)
   // This is a full page load (as after Google/Microsoft): wait until the
   // page is hydrated, or early clicks and scrolls are lost.
   await page.waitForLoadState("networkidle");
+  await waitForHydration(page);
 }
 
 /** Text of a live (CodeMirror) editor, or "" when only the placeholder shows. */
@@ -48,4 +49,20 @@ export async function setEditorText(page: Page, editor: Locator, text: string) {
     if (i > 0) await page.keyboard.press("Enter");
     if (line) await page.keyboard.insertText(line);
   }
+}
+
+/**
+ * Wait until React has hydrated the whole page: every element has React's
+ * fiber key (streamed sections hydrate after the shell, so checking one
+ * element isn't enough). Scripts, Next's own elements and CodeMirror's DOM
+ * (and the hidden inputs React adds to server-action forms) are skipped. "networkidle" alone can come first when nothing is fetched
+ * after load, and clicks or scrolls before hydration are lost.
+ */
+export async function waitForHydration(page: Page) {
+  await page.waitForFunction(() => {
+    const skip = "script, template, style, link, input[type=hidden], nextjs-portal, next-route-announcer, .cm-editor";
+    const hydrated = (el: Element) => Object.keys(el).some((k) => k.startsWith("__reactFiber"));
+    const all = [...document.body.querySelectorAll("*")];
+    return all.length > 0 && all.every((el) => el.closest(skip) || hydrated(el));
+  });
 }

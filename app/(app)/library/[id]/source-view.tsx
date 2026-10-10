@@ -7,7 +7,7 @@ import { InlineAutoText, InlineSelectText, InlineTitle, useInlineSave } from "@/
 import { GroupTags } from "@/components/group-tags";
 import { LiveEditor } from "@/components/live-editor/live-editor";
 import { ReaderPanel, type ReaderTab } from "@/components/reader-panel";
-import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
+import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
 import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
 import { MAX_UPLOAD_BYTES, SOURCE_TYPE_OPTIONS, type GroupRefDto, type SourceDto, type SourceType } from "@/lib/dto";

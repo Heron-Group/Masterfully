@@ -27,13 +27,23 @@ test("signing in returns to the requested page, signing out ends the session", a
   await expect(page).toHaveURL(/\/login/);
 });
 
-test("theme toggle switches and persists", async ({ page }) => {
-  await signIn(page);
+test("colour mode is set in Settings and persists", async ({ page }) => {
+  await signIn(page, "/settings");
   const html = page.locator("html");
-  await page.getByRole("button", { name: /Theme:/ }).click(); // system → light
-  await expect(html).toHaveAttribute("data-theme", "light");
-  await page.getByRole("button", { name: /Theme:/ }).click(); // light → dark
+  // No status or theme controls in the app shell any more.
+  await expect(page.getByText("Local only")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Theme/ })).toHaveCount(0);
+  const mode = page.getByRole("radiogroup", { name: "Colour mode" });
+  await expect(mode.getByRole("radio", { name: "Match system" })).toHaveAttribute("aria-checked", "true");
+  await mode.getByRole("radio", { name: "Dark" }).click();
   await expect(html).toHaveAttribute("data-theme", "dark");
-  await page.reload();
+  await page.goto("/journal");
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  await page.goto("/settings");
+  await expect(mode.getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
+  await mode.getByRole("radio", { name: "Light" }).click();
+  await expect(html).toHaveAttribute("data-theme", "light");
+  await mode.getByRole("radio", { name: "Match system" }).click();
+  await page.emulateMedia({ colorScheme: "dark" });
   await expect(html).toHaveAttribute("data-theme", "dark");
 });

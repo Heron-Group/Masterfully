@@ -2,6 +2,7 @@ import { Download } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { SignOutButton } from "@/components/sign-out-button";
+import { ThemeSetting } from "@/components/theme-setting";
 import { ui } from "@/components/ui";
 import { getAiSettings } from "@/lib/ai/user-config";
 import { requireSession } from "@/lib/auth";
@@ -44,6 +45,16 @@ async function SettingsContent() {
         <div className="mt-4">
           <SignOutButton />
         </div>
+      </section>
+
+      <section aria-labelledby="appearance-heading">
+        <h2 id="appearance-heading" className={`${ui.h2} mb-2`}>
+          Appearance
+        </h2>
+        <p className="mb-4 max-w-prose text-sm text-muted">
+          Colour mode for this browser. Match system follows your device&apos;s setting.
+        </p>
+        <ThemeSetting />
       </section>
 
       <section id="ai" aria-labelledby="ai-heading" className="scroll-mt-8">

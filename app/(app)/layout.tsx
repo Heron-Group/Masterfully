@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { NavLinks, NavList } from "@/components/nav-links";
-import { SyncStatus } from "@/components/sync-status";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
  * App shell: a left-hand sidebar on wider screens, a compact icon bar on
@@ -21,15 +19,11 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
             <NavLinks variant="sidebar" part="main" />
           </Suspense>
         </nav>
-        <nav aria-label="Account" className="mt-auto px-3 pb-2">
+        <nav aria-label="Account" className="mt-auto px-3">
           <Suspense fallback={<NavList variant="sidebar" part="footer" />}>
             <NavLinks variant="sidebar" part="footer" />
           </Suspense>
         </nav>
-        <div className="flex items-center justify-between px-3">
-          <SyncStatus placement="up" />
-          <ThemeToggle />
-        </div>
       </aside>
 
       <header className="sticky top-0 z-20 border-b border-rule bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
@@ -39,8 +33,6 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
               <NavLinks variant="bar" />
             </Suspense>
           </div>
-          <SyncStatus />
-          <ThemeToggle />
         </nav>
       </header>
 

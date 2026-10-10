@@ -33,8 +33,10 @@ export const viewport: Viewport = {
   ],
 };
 
-// Runs before first paint so the page never flashes the wrong theme.
-const themeScript = `(function(){try{var t=localStorage.getItem("theme");var d=t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.dataset.theme=d?"dark":"light"}catch(e){}})()`;
+// Runs before first paint so the page never flashes the wrong theme, and
+// follows the system's light/dark setting while "Match system" is chosen
+// (Settings → Appearance stores a fixed choice in localStorage "theme").
+const themeScript = `(function(){function a(){try{var t=localStorage.getItem("theme");var d=t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.dataset.theme=d?"dark":"light"}catch(e){}}a();try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",a)}catch(e){}})()`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

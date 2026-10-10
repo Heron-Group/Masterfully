@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { InlineTitle } from "@/components/inline-fields";
 import { LiveEditor } from "@/components/live-editor/live-editor";
-import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
+import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
 import { ui } from "@/components/ui";
 import type { NoteDto } from "@/lib/dto";
 import { upload } from "@/lib/upload-client";

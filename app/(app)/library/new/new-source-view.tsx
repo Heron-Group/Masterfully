@@ -10,7 +10,7 @@ import {
 } from "@/components/inline-fields";
 import { GroupTags } from "@/components/group-tags";
 import { LiveEditor } from "@/components/live-editor/live-editor";
-import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
+import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
 import { ui } from "@/components/ui";
 import {
   formatBytes,

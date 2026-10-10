@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { REPO_DIR } from "./fixtures";
+import { waitForHydration } from "./helpers";
 
 // Uses the development sign-in (AUTH_DEV_LOGIN=1 in .env.local) to act as
 // several users without Google or Microsoft.
@@ -11,6 +12,7 @@ const stamp = Date.now();
 async function signInAs(page: Page, email: string, next = "/library") {
   await page.goto(`/api/auth/dev?email=${encodeURIComponent(email)}&name=${email.split("@")[0]}&next=${encodeURIComponent(next)}`);
   await page.waitForURL(`**${next}`);
+  await waitForHydration(page);
 }
 
 function accountId(email: string): string {
@@ -65,7 +67,6 @@ test("AI provider and API key in Settings", async ({ page }) => {
   await signInAs(page, email, "/settings");
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   await expect(page.getByText(email)).toBeVisible();
-  await page.waitForLoadState("networkidle");
 
   // Choose OpenAI and save a key: only a hint is shown, and the file holds no plain key.
   await page.getByRole("radio", { name: "OpenAI" }).click();

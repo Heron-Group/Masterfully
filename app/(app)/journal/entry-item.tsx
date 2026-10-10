@@ -4,7 +4,7 @@ import { Check, Pencil, Trash2 } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { LiveEditor, type LiveEditorHandle } from "@/components/live-editor/live-editor";
 import { Markdown } from "@/components/markdown";
-import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
+import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
 import type { EntryDto } from "@/lib/dto";
 import { formatShortDate, formatTime } from "@/lib/time";
 import { jsonFetch, upload } from "@/lib/upload-client";

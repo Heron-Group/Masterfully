@@ -3,7 +3,7 @@
 import { ArrowUp } from "lucide-react";
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { LiveEditor, type LiveEditorHandle } from "@/components/live-editor/live-editor";
-import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
+import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
 import type { EntryDto } from "@/lib/dto";
 import { upload } from "@/lib/upload-client";
 import { AttachButton, PendingFiles, releasePending, toPending, type PendingFile } from "./attachments";
