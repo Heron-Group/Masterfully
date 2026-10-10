@@ -7,15 +7,58 @@ import { fileUrl, formatBytes, IMAGE_TYPES, MAX_UPLOAD_BYTES, type AttachmentDto
 export function AttachmentList({
   attachments,
   onRemove,
+  columns,
 }: {
   attachments: AttachmentDto[];
   /** When given, each attachment shows a remove control (with a confirm step). */
   onRemove?: (file: string) => void;
+  /** Two full-width columns (notes): images two to a row, then files two to a row. */
+  columns?: boolean;
 }) {
   const [open, setOpen] = useState<AttachmentDto | null>(null);
   const images = attachments.filter((a) => a.isImage);
   const files = attachments.filter((a) => !a.isImage);
   if (!attachments.length) return null;
+  if (columns) {
+    return (
+      <div className="mt-3 space-y-2">
+        {images.length > 0 && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {images.map((a) => (
+              <div key={a.file} className="group/att relative">
+                <button
+                  type="button"
+                  onClick={() => setOpen(a)}
+                  className="block w-full overflow-hidden rounded-md bg-accent-soft"
+                  aria-label={`Open ${a.name}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- authenticated, server-thumbnailed */}
+                  <img
+                    src={a.thumbUrl ?? a.url}
+                    alt={a.name}
+                    loading="lazy"
+                    className="aspect-[4/3] w-full object-cover transition-opacity group-hover/att:opacity-90"
+                  />
+                </button>
+                {onRemove && <RemoveControl name={a.name} onRemove={() => onRemove(a.file)} overlay />}
+              </div>
+            ))}
+          </div>
+        )}
+        {files.length > 0 && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {files.map((a) => (
+              <div key={a.file} className="group/att relative">
+                <FileCard attachment={a} wide />
+                {onRemove && <RemoveControl name={a.name} onRemove={() => onRemove(a.file)} />}
+              </div>
+            ))}
+          </div>
+        )}
+        {open && <Lightbox attachment={open} onClose={() => setOpen(null)} />}
+      </div>
+    );
+  }
   return (
     <div className="mt-3 space-y-2">
       {images.length > 0 && (
@@ -78,9 +121,9 @@ function RemoveControl({ name, onRemove, overlay }: { name: string; onRemove: ()
   );
 }
 
-export function FileCard({ attachment: a }: { attachment: AttachmentDto }) {
+export function FileCard({ attachment: a, wide }: { attachment: AttachmentDto; wide?: boolean }) {
   return (
-    <div className="flex max-w-md items-center gap-3 rounded-md bg-accent-soft/60 px-3 py-2">
+    <div className={`flex items-center gap-3 rounded-md bg-accent-soft/60 px-3 py-2 ${wide ? "" : "max-w-md"}`}>
       <FileIcon type={a.type} />
       <a href={a.url} target="_blank" rel="noopener" className="min-w-0 flex-1 hover:underline">
         <span className="block truncate text-sm text-ink">{a.name}</span>

@@ -121,7 +121,7 @@ export function SummaryPanel({
           ) : (
             <button type="button" onClick={() => void generate()} className={ui.btnAction}>
               <Sparkles size={14} strokeWidth={1.7} aria-hidden="true" />
-              {summary ? "Regenerate summary" : "Generate summary"}
+              {summary ? "Regenerate summary" : "Summarise"}
             </button>
           )}
         </div>

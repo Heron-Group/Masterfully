@@ -231,7 +231,7 @@ function Attachments({ note }: { note: NoteDto }) {
         </label>
       </div>
       {attachments.length ? (
-        <AttachmentList attachments={attachments} onRemove={remove} />
+        <AttachmentList attachments={attachments} onRemove={remove} columns />
       ) : (
         <p className="text-sm text-faint">Files you add appear here.</p>
       )}

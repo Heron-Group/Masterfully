@@ -75,12 +75,12 @@ export function GroupTags({
       {selected.map((g) => (
         <span key={g.id} className="group/tag inline-flex items-center rounded-md bg-accent-soft/70 text-[13px] text-ink">
           {linkTags ? (
-            <Link href={`/groups/${g.id}`} className="flex items-center gap-1.5 py-0.5 pl-2 pr-1 hover:underline hover:decoration-rule hover:underline-offset-2">
+            <Link href={`/groups/${g.id}`} className="flex items-center gap-1.5 py-1 pl-2 pr-1 hover:underline hover:decoration-rule hover:underline-offset-2">
               <SquareStack size={13} strokeWidth={1.7} className="text-muted" aria-hidden="true" />
               {g.title}
             </Link>
           ) : (
-            <span className="flex items-center gap-1.5 py-0.5 pl-2 pr-1">
+            <span className="flex items-center gap-1.5 py-1 pl-2 pr-1">
               <SquareStack size={13} strokeWidth={1.7} className="text-muted" aria-hidden="true" />
               {g.title}
             </span>
@@ -90,7 +90,7 @@ export function GroupTags({
             onClick={() => onRemove(g.id)}
             aria-label={`Remove from ${g.title}`}
             title={`Remove from ${g.title}`}
-            className="rounded-r-md px-1 py-0.5 text-faint hover:text-danger"
+            className="self-stretch rounded-r-md px-1 text-faint hover:text-danger"
           >
             <X size={13} aria-hidden="true" />
           </button>

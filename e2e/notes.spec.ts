@@ -56,7 +56,7 @@ test("edit the note's text and title, and search for it", async ({ page }) => {
 
 test("generate an AI summary; the note's text is untouched", async ({ page }) => {
   await signIn(page, new URL(noteUrl).pathname);
-  await page.getByRole("button", { name: /Generate summary|Regenerate summary/ }).click();
+  await page.getByRole("button", { name: /^Summarise$|Regenerate summary/ }).click();
   await expect(page.getByText(/AI-generated \d+ \w+ \d{4} · fake-model/)).toBeVisible({ timeout: 15_000 });
   expect(noteFile()).toContain(`Rewritten **text** ${stamp}`);
   expect(noteFile()).toMatch(/## AI summary\n\n<!-- generated: .*; model: fake-model -->/);

@@ -58,7 +58,9 @@ export function InlineTitle({
       placeholder={placeholder}
       autoFocus={autoFocus}
       minRows={1}
-      className={`${fieldBase} block resize-none font-serif text-[1.9rem] leading-tight tracking-tight`}
+      // Newsreader's letters sit high in their line, so the text is nudged down
+      // (more top padding, none below) to centre it in the hover highlight.
+      className={`${fieldBase} block resize-none pb-0 pt-[10px] font-serif text-[1.9rem] leading-[1.1] tracking-tight`}
     />
   );
 }
