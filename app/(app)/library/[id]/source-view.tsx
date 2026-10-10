@@ -270,8 +270,7 @@ function ReadButton({ kind, label, reading, onRead }: { kind: ReadKind; label: s
       type="button"
       onClick={() => onRead(open ? null : kind)}
       aria-pressed={open}
-      // One fixed width (fits "Close web page") so the PDF and web page buttons match.
-      className={`inline-flex w-40 shrink-0 items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors ${
+      className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors ${
         open ? "bg-ink text-paper" : "bg-accent-soft/70 text-ink hover:bg-accent-soft"
       }`}
     >
