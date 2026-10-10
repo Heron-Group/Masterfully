@@ -38,6 +38,23 @@ import {
 } from "./sections";
 import { formatCommitTime } from "../time";
 
+export type CommitAuthor = { name: string; email: string };
+
+/**
+ * A store is either a whole repository (single user, tests) or a workspace:
+ * one user's folder (e.g. users/<id>) inside a shared repository, using the
+ * repository's Git connection.
+ */
+export type WorkspaceOptions = {
+  git: GitSync;
+  repoDir: string;
+  /** Folder inside the repository, e.g. "users/abc123". */
+  prefix: string;
+  author?: CommitAuthor;
+  refreshIntervalMs?: number;
+  now?: () => Date;
+};
+
 export type StoreOptions = Omit<GitOptions, "onRemoteChange"> & {
   /** Minimum gap between filesystem rescans triggered by reads. */
   refreshIntervalMs?: number;
@@ -78,6 +95,11 @@ export type SourcePatch = Partial<Pick<Source, "title" | "authors" | "type" | "u
 export class ContentStore {
   readonly dir: string;
   readonly git: GitSync;
+  /** Root of the Git repository (the same as `dir` unless this is a workspace). */
+  readonly repoDir: string;
+  /** This store's folder within the repository ("" for a whole repository). */
+  readonly prefix: string;
+  private readonly author?: CommitAuthor;
   private readonly now: () => Date;
   private readonly refreshIntervalMs: number;
 
@@ -93,24 +115,42 @@ export class ContentStore {
   private lastRefresh = 0;
   private forceRefresh = true;
 
-  constructor(opts: StoreOptions) {
-    this.dir = path.resolve(opts.dir);
+  constructor(opts: StoreOptions | WorkspaceOptions) {
     this.now = opts.now ?? (() => new Date());
     this.refreshIntervalMs = opts.refreshIntervalMs ?? 500;
-    this.git = new GitSync({
-      ...opts,
-      dir: this.dir,
-      onRemoteChange: () => {
-        this.forceRefresh = true;
-      },
-    });
+    if ("prefix" in opts) {
+      this.repoDir = path.resolve(opts.repoDir);
+      this.prefix = opts.prefix.replace(/\/+$/, "");
+      this.dir = path.join(this.repoDir, this.prefix);
+      this.git = opts.git;
+      this.author = opts.author;
+    } else {
+      this.dir = path.resolve(opts.dir);
+      this.repoDir = this.dir;
+      this.prefix = "";
+      this.git = new GitSync({
+        ...opts,
+        dir: this.dir,
+        onRemoteChange: () => {
+          this.forceRefresh = true;
+        },
+      });
+    }
   }
 
+  toRepoPath(rel: string): string {
+    return this.repoPath(rel);
+  }
+
+  /** Path relative to the repository root, for Git. */
+  private repoPath = (rel: string): string => (this.prefix ? `${this.prefix}/${rel}` : rel);
+
   async init(): Promise<void> {
-    await this.git.ensureRepo();
+    // A workspace's repository is prepared once, by whoever owns it.
+    if (!this.prefix) await this.git.ensureRepo();
     await this.git.exclusive(async () => {
       const created: string[] = [];
-      if (!(await exists(this.abs(".gitignore")))) {
+      if (!this.prefix && !(await exists(this.abs(".gitignore")))) {
         await writeAtomic(this.abs(".gitignore"), CONTENT_GITIGNORE, this.tmpDir());
         created.push(".gitignore");
       }
@@ -119,7 +159,13 @@ export class ContentStore {
         await writeAtomic(this.abs(SETTINGS_FILE), serializeSettings(settings), this.tmpDir());
         created.push(SETTINGS_FILE);
       }
-      if (created.length) await this.git.commitPaths(created, "content: initialise repository");
+      if (created.length) {
+        await this.git.commitPaths(
+          created.map(this.repoPath),
+          this.prefix ? `content: set up workspace ${this.prefix}` : "content: initialise repository",
+          this.author,
+        );
+      }
     });
     await this.refresh({ force: true });
   }
@@ -285,9 +331,9 @@ export class ContentStore {
         }
         try {
           const msg = typeof message === "function" ? message(result) : message;
-          await this.git.commitPaths(tx.touched, msg);
+          await this.git.commitPaths(tx.touched.map(this.repoPath), msg, this.author);
         } catch (err) {
-          await this.git.unstage(tx.touched);
+          await this.git.unstage(tx.touched.map(this.repoPath));
           await tx.rollback();
           throw err;
         }
@@ -317,7 +363,7 @@ export class ContentStore {
 
   /** Scratch space for atomic writes and uploads; inside .git so Git never sees it. */
   tmpDir(): string {
-    return path.join(this.dir, ".git", "research-portal-tmp");
+    return path.join(this.repoDir, ".git", "research-portal-tmp");
   }
 
   /**
@@ -978,7 +1024,7 @@ class Tx {
       }
     }
     // Removed folders (e.g. an entry's attachments) come back from the last commit.
-    await this.store.git.restoreFromHead(dirs);
+    await this.store.git.restoreFromHead(dirs.map((d) => this.store.toRepoPath(d)));
     await this.cleanup();
   }
 

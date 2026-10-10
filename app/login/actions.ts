@@ -2,16 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { login, logout } from "@/lib/auth";
+import { safeNext } from "@/lib/auth/redirects";
 
 export type LoginState = { error?: string };
-
-/** Only allow redirects back into this app (no protocol-relative URLs). */
-function safeNext(value: FormDataEntryValue | null): string {
-  const next = typeof value === "string" ? value : "";
-  return next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")
-    ? next
-    : "/journal";
-}
 
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const result = await login(String(formData.get("password") ?? ""));

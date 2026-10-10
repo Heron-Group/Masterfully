@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { CONTENT_DIR, git } from "./fixtures";
+import { workspace, git } from "./fixtures";
 import { readFileSync } from "node:fs";
-import path from "node:path";
 import { signIn } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
@@ -10,7 +9,7 @@ const stamp = Date.now();
 const TITLE = `E2E Methods ${stamp}`;
 let groupUrl = "";
 
-const groupFile = () => readFileSync(path.join(CONTENT_DIR, "groups", `${groupUrl.split("/").pop()}.md`), "utf8");
+const groupFile = () => readFileSync(workspace(`groups/${groupUrl.split("/").pop()}.md`), "utf8");
 
 async function openGroup(page: Page) {
   await signIn(page, groupUrl.replace(/^https?:\/\/[^/]+/, ""));

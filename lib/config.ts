@@ -26,5 +26,11 @@ export function serverConfig() {
       authorEmail: env.GIT_AUTHOR_EMAIL?.trim() || "research-portal@localhost",
     },
     cacheDir: path.resolve(/*turbopackIgnore: true*/ env.CACHE_DIR?.trim() || ".cache"),
+    /** Encrypted per-user secrets (AI API keys). Outside the content repo. */
+    secretsDir: path.resolve(/*turbopackIgnore: true*/ env.SECRETS_DIR?.trim() || ".secrets"),
+    /** Your account: owns the password sign-in and the pre-multi-user content. */
+    ownerEmail: env.OWNER_EMAIL?.trim() || undefined,
+    /** Public address of the app, for sign-in redirects (e.g. https://research.example.com). */
+    appUrl: env.APP_URL?.trim().replace(/\/+$/, "") || undefined,
   };
 }

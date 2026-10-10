@@ -1,18 +1,17 @@
 import { readFileSync } from "node:fs";
-import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { CONTENT_DIR } from "./fixtures";
+import { workspace } from "./fixtures";
 import { signIn } from "./helpers";
 
 // Needs the dev server to run with AI_FAKE=1 (see .env.local) so no API
 // calls are made. Uses the sample library from `seed-dev-content.mjs --library`.
 test.describe.configure({ mode: "serial" });
 
-const read = (rel: string) => readFileSync(path.join(CONTENT_DIR, rel), "utf8");
+const read = (rel: string) => readFileSync(workspace(rel), "utf8");
 
 test("research context saves to settings.md", async ({ page }) => {
   await signIn(page, "/settings");
-  await expect(page.getByText("Simulated (AI_FAKE=1")).toBeVisible();
+  await expect(page.getByText("summaries are simulated")).toBeVisible();
   const editor = page.getByRole("textbox", { name: "Research context" });
   const text = `How can graphic language support co-design with community groups? (${Date.now()})`;
   await editor.fill(text);

@@ -19,7 +19,8 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     CONTENT_DIR=/data/content \
-    CACHE_DIR=/data/cache
+    CACHE_DIR=/data/cache \
+    SECRETS_DIR=/data/secrets
 WORKDIR /app
 COPY --from=build --chown=node:node /app/.next/standalone ./
 RUN mkdir -p /data && chown node:node /data

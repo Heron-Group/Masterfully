@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Sparkles, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -142,6 +143,11 @@ export function SummaryPanel({
               <button type="button" onClick={() => void generate("metadata")} className={ui.btnSecondary}>
                 Summarise from details and notes only
               </button>
+            )}
+            {run.code === "not_configured" && (
+              <Link href="/settings#ai" className={ui.btnSecondary}>
+                Open Settings
+              </Link>
             )}
             {run.code !== "not_configured" && (
               <button type="button" onClick={() => void generate()} className={ui.btnGhost}>

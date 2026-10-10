@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import path from "node:path";
-import { CONTENT_DIR, git, handRemove, handWrite, pdfFile } from "./fixtures";
+import { workspace, git, handRemove, handWrite, pdfFile } from "./fixtures";
 
 /** Add the open source to a group with the tag list. */
 async function addToGroup(page: import("@playwright/test").Page, name: string) {
@@ -12,7 +11,7 @@ async function addToGroup(page: import("@playwright/test").Page, name: string) {
   await expect(page.getByRole("group", { name: "Reading groups" }).getByText(name)).toBeVisible();
 }
 
-const read = (rel: string) => readFileSync(path.join(CONTENT_DIR, rel), "utf8");
+const read = (rel: string) => readFileSync(workspace(rel), "utf8");
 import { setEditorText, signIn } from "./helpers";
 
 test.describe.configure({ mode: "serial" });

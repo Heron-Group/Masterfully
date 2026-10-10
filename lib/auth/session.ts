@@ -1,9 +1,8 @@
 /**
- * Signed session tokens: `v1.<expiresAtMs>.<hmac>`. Uses Web Crypto only so
- * it runs anywhere (proxy, route handlers, tests).
+ * Signed session tokens: `v2.<userId>.<expiresAtMs>.<hmac>`. Uses Web Crypto
+ * only so it runs anywhere (proxy, route handlers, tests).
  *
- * The signing key mixes SESSION_SECRET with the password hash, so changing
- * the password signs out every existing session.
+ * Changing SESSION_SECRET signs out every session.
  */
 
 export const SESSION_COOKIE = "rp_session";
@@ -35,39 +34,37 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export type SessionKeys = { secret: string; passwordHash: string };
+export type SessionKeys = { secret: string };
 
 export function sessionKeysFromEnv(): SessionKeys | null {
   const secret = process.env.SESSION_SECRET ?? "";
-  const passwordHash = process.env.APP_PASSWORD_HASH ?? "";
-  if (secret.length < 32 || !passwordHash) return null;
-  return { secret, passwordHash };
-}
-
-function signingKey(keys: SessionKeys): string {
-  return `${keys.secret}\u0000${keys.passwordHash}`;
+  return secret.length >= 32 ? { secret } : null;
 }
 
 export async function createSessionToken(
   keys: SessionKeys,
+  userId: string,
   now = Date.now(),
 ): Promise<{ token: string; expires: Date }> {
+  if (!/^[A-Za-z0-9_-]+$/.test(userId)) throw new Error("Invalid user id");
   const expiresAt = now + SESSION_MAX_AGE_SECONDS * 1000;
-  const payload = `v1.${expiresAt}`;
-  const token = `${payload}.${await hmac(signingKey(keys), payload)}`;
+  const payload = `v2.${userId}.${expiresAt}`;
+  const token = `${payload}.${await hmac(keys.secret, payload)}`;
   return { token, expires: new Date(expiresAt) };
 }
 
+/** The user id in a valid, unexpired token; otherwise null. */
 export async function verifySessionToken(
   keys: SessionKeys | null,
   token: string | undefined,
   now = Date.now(),
-): Promise<boolean> {
-  if (!keys || !token) return false;
+): Promise<string | null> {
+  if (!keys || !token) return null;
   const parts = token.split(".");
-  if (parts.length !== 3 || parts[0] !== "v1") return false;
-  const expiresAt = Number(parts[1]);
-  if (!Number.isFinite(expiresAt) || expiresAt <= now) return false;
-  const expected = await hmac(signingKey(keys), `${parts[0]}.${parts[1]}`);
-  return timingSafeEqual(expected, parts[2]);
+  if (parts.length !== 4 || parts[0] !== "v2") return null;
+  const [, userId, exp, sig] = parts;
+  const expiresAt = Number(exp);
+  if (!userId || !Number.isFinite(expiresAt) || expiresAt <= now) return null;
+  const expected = await hmac(keys.secret, `v2.${userId}.${exp}`);
+  return timingSafeEqual(expected, sig) ? userId : null;
 }

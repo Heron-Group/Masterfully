@@ -1,17 +1,35 @@
 #!/usr/bin/env node
 // Development only: fill ./.dev-content (or CONTENT_DIR) with sample journal
 // entries spread over several weeks, then commit them in the content repo.
-// Usage: node scripts/seed-dev-content.mjs [count] [--library]
+// Usage: node scripts/seed-dev-content.mjs [count] [--library] [--user=email]
 //   --library also adds a few sample sources and a reading group.
+//   --user picks whose workspace to fill; by default the account that signs
+//   in with the password (the owner), or the repository root before anyone
+//   has signed in (moved into the owner's workspace on first sign-in).
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-const dir = path.resolve(process.env.CONTENT_DIR || ".dev-content");
-if (!existsSync(path.join(dir, ".git"))) {
-  console.error(`${dir} is not an initialised content repo. Start the app once first.`);
+const repo = path.resolve(process.env.CONTENT_DIR || ".dev-content");
+if (!existsSync(path.join(repo, ".git"))) {
+  console.error(`${repo} is not an initialised content repo. Start the app once first.`);
   process.exit(1);
 }
+const user = process.argv.find((a) => a.startsWith("--user="))?.slice(7).toLowerCase();
+const accountsDir = path.join(repo, "accounts");
+const accounts = existsSync(accountsDir)
+  ? readdirSync(accountsDir)
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => ({ id: f.slice(0, -3), text: readFileSync(path.join(accountsDir, f), "utf8") }))
+  : [];
+const target = user
+  ? accounts.find((a) => a.text.toLowerCase().includes(`email: ${user}`))
+  : accounts.find((a) => a.text.includes("subject: owner"));
+if (user && !target) {
+  console.error(`No account with the email ${user}. Sign in as them once first.`);
+  process.exit(1);
+}
+const dir = target ? path.join(repo, "users", target.id) : repo;
 const count = Number(process.argv.slice(2).find((a) => /^\d+$/.test(a)) ?? 160);
 const withLibrary = process.argv.includes("--library");
 const lines = [
@@ -55,6 +73,6 @@ if (withLibrary) {
     `---\nid: co-design-foundations\ntitle: "Co-design foundations"\ncreated: ${added.toISOString().replace(/\.\d{3}Z$/, "Z")}\nupdated: ${added.toISOString().replace(/\.\d{3}Z$/, "Z")}\nsources:\n  - id: sanders-2008-co-creation-new\n    note: "The vocabulary I keep returning to"\n  - id: ehn-2008-participation-design-things\n    note: "Infrastructuring and design Things"\n  - id: schon-1983-reflective-practitioner\n---\n## Overview\n\nFoundational texts on participation and co-design that frame the methods chapter.\n`,
   );
 }
-execFileSync("git", ["add", "-A"], { cwd: dir });
-execFileSync("git", ["-c", "user.name=Seed", "-c", "user.email=seed@localhost", "commit", "-q", "-m", `dev: seed ${count} sample journal entries${withLibrary ? " and a sample library" : ""}`], { cwd: dir });
+execFileSync("git", ["add", "-A", "--", dir], { cwd: repo });
+execFileSync("git", ["-c", "user.name=Seed", "-c", "user.email=seed@localhost", "commit", "-q", "-m", `dev: seed ${count} sample journal entries${withLibrary ? " and a sample library" : ""}`], { cwd: repo });
 console.log(`Seeded ${count} journal entries${withLibrary ? " and a sample library" : ""} in ${dir}`);

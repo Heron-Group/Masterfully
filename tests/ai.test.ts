@@ -87,11 +87,19 @@ describe("summaries (simulated API)", () => {
     return out;
   }
 
+  const fake = { backend: { provider: "fake" as const } };
+
+  it("asks for an API key when none is set up", async () => {
+    const s = await store.createSource({ title: "No key" });
+    const events = await collect(summariseSource(store, s.id, { backend: null }));
+    expect(events).toEqual([{ type: "error", code: "not_configured", message: expect.stringContaining("Settings") }]);
+  });
+
   it("streams a summary and rewrites only the AI summary section", async () => {
     const s = await store.createSource({ title: "Only metadata", notes: "My notes\n\n## Sub-heading\n\nKept" });
     const file = path.join(store.dir, s.path);
     const before = await fs.readFile(file, "utf8");
-    const events = await collect(summariseSource(store, s.id));
+    const events = await collect(summariseSource(store, s.id, fake));
     expect(events[0]).toMatchObject({ type: "notice" });
     expect(events.filter((e) => e.type === "delta").length).toBeGreaterThan(5);
     const done = events.at(-1);
@@ -106,28 +114,28 @@ describe("summaries (simulated API)", () => {
     const s = await store.createSource({ title: "Broken [fail]" });
     await store.setSourceAiSummary(s.id, { text: "Earlier summary", model: "m" });
     const before = await fs.readFile(path.join(store.dir, s.path), "utf8");
-    const events = await collect(summariseSource(store, s.id, { mode: "metadata" }));
+    const events = await collect(summariseSource(store, s.id, { ...fake, mode: "metadata" }));
     expect(events.at(-1)).toMatchObject({ type: "error", code: "api" });
     expect(await fs.readFile(path.join(store.dir, s.path), "utf8")).toBe(before);
   });
 
   it("reports refusals clearly", async () => {
     const s = await store.createSource({ title: "Declined [refuse]" });
-    const events = await collect(summariseSource(store, s.id, { mode: "metadata" }));
+    const events = await collect(summariseSource(store, s.id, { ...fake, mode: "metadata" }));
     expect(events.at(-1)).toMatchObject({ type: "error", code: "refusal" });
   });
 
   it("summarises a group and clears its stale flag", async () => {
     await store.createGroup({ title: "G", overview: "Mine" });
     const a = await store.createSource({ title: "A" }, { groups: ["g"] });
-    const events = await collect(summariseGroup(store, "g"));
+    const events = await collect(summariseGroup(store, "g", fake));
     expect(events.find((e) => e.type === "notice")).toMatchObject({ message: expect.stringContaining("1 of 1 sources have no AI summary") });
     expect(events.at(-1)).toMatchObject({ type: "done" });
     const group = (await store.getGroup("g"))!;
     expect(group.overview).toBe("Mine");
     expect(store.isGroupSummaryStale(group)).toBe(false);
     await new Promise((r) => setTimeout(r, 1100));
-    await collect(summariseSource(store, a.id));
+    await collect(summariseSource(store, a.id, fake));
     expect(store.isGroupSummaryStale((await store.getGroup("g"))!)).toBe(true);
   });
 });

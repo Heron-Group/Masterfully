@@ -1,10 +1,14 @@
 # Research Portal
 
-A private, single-user web app for a practice-led PhD: a **research journal** that
+A private web app for practice-led PhD research: a **research journal** that
 works like a messaging app, and a **reading list** of sources organised into
 reading groups, with optional AI summaries.
 
-Everything you write is a plain Markdown file with YAML frontmatter, in a content
+Anyone can sign up with a **Google or Microsoft account**; each person gets their
+own private workspace. AI summaries use each person's **own Claude or OpenAI API
+key**, added in Settings.
+
+Everything written is a plain Markdown file with YAML frontmatter, in a content
 folder that is its own Git repository and is pushed to a private GitHub repo.
 There is no database. You can read and edit the files without the app (in
 Obsidian or any text editor), and the app picks up those edits on the next page
@@ -12,6 +16,7 @@ load.
 
 - [Development](#development)
 - [Configuration](#configuration)
+- [Sign-in with Google and Microsoft](#sign-in-with-google-and-microsoft)
 - [The content repository and backups](#the-content-repository-and-backups)
 - [Deploying on Plesk](#deploying-on-plesk)
 - [Docker fallback](#docker-fallback)
@@ -35,11 +40,12 @@ npm run dev                  # http://localhost:3000
 
 In `.env.local`, write each `$` in the password hash as `\$` (Next.js expands
 `$NAME` in `.env` files; the script prints this form for you). For local work
-you only need `APP_PASSWORD_HASH`, `SESSION_SECRET` and, optionally:
+you only need `SESSION_SECRET`, `APP_PASSWORD_HASH`, `OWNER_EMAIL` and, optionally:
 
 ```bash
 CONTENT_DIR=.dev-content   # the default in development; created on first run
 AI_FAKE=1                  # scripted AI summaries, no API key or cost (development only)
+AUTH_DEV_LOGIN=1           # sign in as any email address, to try several users (development only)
 ```
 
 To fill the development content folder with sample journal entries, sources and
@@ -57,8 +63,13 @@ All settings are environment variables. `.env.example` lists them with comments.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `APP_PASSWORD_HASH` | yes | bcrypt hash of your password. Generate with `npm run hash-password`. |
-| `SESSION_SECRET` | yes | At least 32 random characters; signs the session cookie. Changing it, or the password, signs out every device. |
+| `SESSION_SECRET` | yes | At least 32 random characters. Signs session cookies and encrypts users' AI keys. Changing it signs everyone out, and users must re-enter their AI keys. |
+| `APP_URL` | yes (production) | Public address, e.g. `https://research.example.com`, for sign-in redirects. |
+| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | for Google sign-in | OAuth client (see [below](#sign-in-with-google-and-microsoft)). The button only shows when both are set. |
+| `AUTH_MICROSOFT_ID`, `AUTH_MICROSOFT_SECRET` | for Microsoft sign-in | App registration (see below). |
+| `AUTH_MICROSOFT_TENANT` | no | `common` (default: work, school and personal accounts), `consumers`, `organizations`, or one tenant ID. |
+| `OWNER_EMAIL` | recommended | Your email. Your account owns the content from the single-user version and can sign in with the password. |
+| `APP_PASSWORD_HASH` | no | Password sign-in for the owner only, as a fallback. Needs `OWNER_EMAIL`. Generate with `npm run hash-password`. |
 | `CONTENT_DIR` | yes (production) | **Absolute** path of the content folder, outside the web root, e.g. `/var/www/vhosts/example.com/research-content`. |
 | `CONTENT_GIT_REMOTE` | recommended | SSH URL of the private GitHub repo, e.g. `git@github.com:you/research-content.git`. Leave empty to keep content local only. |
 | `CONTENT_GIT_BRANCH` | no | Default `main`. |
@@ -66,22 +77,60 @@ All settings are environment variables. `.env.example` lists them with comments.
 | `GIT_PUSH_DELAY_SECONDS` | no | Push this long after the last change. Default `60`. |
 | `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL` | no | Name and email on content commits. |
 | `CACHE_DIR` | no | Image thumbnails (safe to delete; rebuilt on demand). Use an absolute path outside the content folder. |
-| `ANTHROPIC_API_KEY` | for AI | Key for AI summaries. Without it the app works; the summary buttons explain what's missing. |
-| `ANTHROPIC_MODEL` | no | Model for summaries. Default `claude-opus-5-5`. |
+| `SECRETS_DIR` | yes (production) | Users' encrypted AI API keys. Absolute path outside the content folder and web root. Default `.secrets`. |
 
 ---
+
+## Sign-in with Google and Microsoft
+
+Anyone with a Google or Microsoft account can sign up; the first sign-in
+creates their account and an empty private workspace. A Google and a Microsoft
+sign-in with the same **verified** email address join the same account. (Work
+and school Microsoft accounts don't count as verified, so they are never joined
+to someone else's account by email.)
+
+**Google** (console.cloud.google.com):
+
+1. Create a project, then **APIs & Services → OAuth consent screen**: External,
+   app name, your email. Scopes: `openid`, `email`, `profile`. Publish the app
+   so that anyone can sign in (these scopes need no verification).
+2. **Credentials → Create credentials → OAuth client ID** → Web application.
+   Authorised redirect URI: `https://research.example.com/api/auth/google/callback`
+   (and `http://localhost:3000/api/auth/google/callback` for development).
+3. Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`.
+
+**Microsoft** (entra.microsoft.com):
+
+1. **App registrations → New registration**. Supported account types: "Accounts
+   in any organizational directory and personal Microsoft accounts". Redirect
+   URI: platform **Web**, `https://research.example.com/api/auth/microsoft/callback`.
+2. **Certificates & secrets → New client secret**. Copy the *value*.
+   Secrets expire (up to 24 months): set a reminder to renew it.
+3. Set `AUTH_MICROSOFT_ID` (the Application (client) ID) and
+   `AUTH_MICROSOFT_SECRET`.
+
+Restart the app after changing these. **Privacy:** each user only ever sees
+their own workspace in the app, but whoever runs the server or can read the
+GitHub repository can read everyone's files. Tell your users this.
 
 ## The content repository and backups
 
 ```
 research-content/
-  journal/2026/10/2026-10-09T14-32-05Z.md     one file per entry
-  sources/brody-2025-graphic-language.md      one file per source
-  groups/co-design-foundations.md             one file per reading group
-  attachments/sources/<source id>.pdf
-  attachments/journal/<entry id>/<files>
-  settings.md                                 your research context
+  accounts/<user id>.md                       one file per account (name, email, sign-ins)
+  users/<user id>/                            each user's private workspace:
+    journal/2026/10/2026-10-09T14-32-05Z.md     one file per entry
+    sources/brody-2025-graphic-language.md      one file per source
+    groups/co-design-foundations.md             one file per reading group
+    attachments/sources/<source id>.pdf
+    attachments/journal/<entry id>/<files>
+    settings.md                                 their research context
 ```
+
+Content from the single-user version (at the top of the repository) moves into
+the owner's workspace (`OWNER_EMAIL`) the first time they sign in, in one commit.
+Commits are authored as the user who made the change. AI keys are **not** in
+the repository; they are encrypted in `SECRETS_DIR`.
 
 How the app treats it:
 
@@ -221,7 +270,8 @@ in the code folder.
 
 ### 7. Check it
 
-- Open `https://research.example.com`. You should see the sign-in page.
+- Open `https://research.example.com`. You should see the sign-in page with
+  the Google and Microsoft buttons.
 - Sign in, post a journal entry, and within about a minute it appears in the
   GitHub repo. The header dot turns green ("Backed up").
 - Signed out, `https://research.example.com/api/journal` returns 401.
@@ -243,8 +293,8 @@ docker run -d --name research -p 3000:3000 \
   research-portal
 ```
 
-`CONTENT_DIR` (`/data/content`) and `CACHE_DIR` (`/data/cache`) are set in the
-image. Put HTTPS in front of it (Plesk's Docker proxy rules, or any reverse
+`CONTENT_DIR` (`/data/content`), `CACHE_DIR` (`/data/cache`) and `SECRETS_DIR`
+(`/data/secrets`) are set in the image. Put HTTPS in front of it (Plesk's Docker proxy rules, or any reverse
 proxy) and allow request bodies of at least 60 MB.
 
 ---
@@ -266,11 +316,18 @@ and a failed call changes nothing.
   when sources are added, removed or re-summarised.
 - Your **research context** (Settings) is included in every prompt.
 
-**Change the model** by setting `ANTHROPIC_MODEL` (in Plesk's environment
-variables) and restarting the app. The default is `claude-opus-5-5`.
-`claude-sonnet-5-5` costs about half as much per token. On models that support it,
-the app turns on Anthropic's server-side refusal fallback, so a request declined
-by one model's safety filters is retried on another.
+**Each user brings their own key.** In **Settings → AI summaries**, choose
+Claude or OpenAI and paste an API key. It is checked with the provider (a free
+request), encrypted with AES-256-GCM under a key derived from `SESSION_SECRET`,
+and stored in `SECRETS_DIR`; only a hint (`sk-ant-…a1b2`) is ever shown again.
+Calls are billed to that user's account. Without a key, the summary buttons
+explain what to do.
+
+**Change the model** in the same place. Defaults: `claude-opus-5-5` for Claude
+(`claude-sonnet-5-5` costs about half as much per token) and `gpt-5.5` for
+OpenAI. On Claude models that support it, the app turns on Anthropic's
+server-side refusal fallback, so a request declined by one model's safety
+filters is retried on another.
 
 **Edit the prompts** in [lib/ai/prompts.ts](lib/ai/prompts.ts).
 
@@ -279,14 +336,16 @@ by one model's safety filters is retried on another.
 ## Tests
 
 ```bash
-npm test             # unit tests: storage, frontmatter, section rewrites, Git sync, auth, AI flow
+npm test             # unit tests: storage, workspaces, accounts, frontmatter, Git sync, auth, key encryption, AI flow
 npm run typecheck
 npm run lint
 npm run test:e2e     # browser tests against the dev server
 ```
 
 Browser tests need the browsers once (`npx playwright install chromium webkit`),
-the sample content (`npm run seed-dev`) and `AI_FAKE=1` in `.env.local`. They
+the sample content (`npm run seed-dev`), and `AI_FAKE=1`, `AUTH_DEV_LOGIN=1`,
+`APP_PASSWORD_HASH` and `OWNER_EMAIL` in `.env.local`. They sign in with the
+password as the owner, and as other users with the development sign-in. They
 run on desktop Chrome, a mobile viewport, and WebKit (Safari's engine). They
 check, among other things:
 
@@ -295,7 +354,9 @@ check, among other things:
 - a 40 MB PDF uploads, is served and is committed;
 - a pasted screenshot and a PDF attach to one entry;
 - regenerating a summary changes only the `## AI summary` section;
-- nothing is reachable signed out.
+- nothing is reachable signed out;
+- one user can't see or open another's sources;
+- an AI key is saved encrypted, shown only as a hint, and can be replaced or removed.
 
 To run them against a production build, start it on another port and point
 the tests at it, e.g. `E2E_PORT=3200 E2E_CONTENT_DIR=/path/to/content npx playwright test`.
@@ -307,11 +368,12 @@ the tests at it, e.g. `E2E_PORT=3200 E2E_CONTENT_DIR=/path/to/content npx playwr
 | Path | Role |
 | --- | --- |
 | [lib/content/](lib/content/) | **The only code that touches the content folder and Git**: tolerant parsing, safe section rewrites, the index, one commit per write with rollback, debounced push with rebase and conflict stop. Moving to another backend later (e.g. the GitHub API) is contained here. |
-| [lib/auth/](lib/auth/) | Password check, signed 30-day HTTP-only cookie, login rate limit (5 per 15 minutes per IP). |
+| [lib/auth/](lib/auth/) | Google and Microsoft sign-in (OAuth with PKCE), the owner's password fallback with a rate limit (5 per 15 minutes per IP), and a signed 30-day HTTP-only cookie holding the user id. |
+| [lib/accounts.ts](lib/accounts.ts) | Accounts (`accounts/<id>.md`), linking sign-ins by verified email, and moving single-user content into the owner's workspace. |
 | [proxy.ts](proxy.ts) | Redirects signed-out requests. Pages, server actions and API routes also check the session themselves. Upload routes skip the proxy (it would cut large bodies off at 10 MB). |
-| [lib/ai/](lib/ai/) | Prompts, PDF handling, safe URL fetching, streaming summaries. |
+| [lib/ai/](lib/ai/) | Prompts, PDF handling, safe URL fetching, streaming summaries from Claude or OpenAI, and each user's encrypted key ([user-config.ts](lib/ai/user-config.ts)). |
 | [app/](app/) | Pages (journal, library, groups, settings) and API routes. |
-| [instrumentation.ts](instrumentation.ts) | On start: clone or open the content repo and build the index. |
+| [instrumentation.ts](instrumentation.ts) | On start: clone or open the content repo. Each workspace's index is built on its user's first request. |
 | [server.js](server.js) | Startup file for Plesk and `npm start`. |
 
 Structured to make later additions straightforward: citation export (sources
@@ -339,8 +401,12 @@ nginx directives (step 5). The app's own limit is 50 MB per file.
 has an error (often an unquoted colon in a title). Fix it in a text editor; it
 reappears on the next page load.
 
-**Signed out on every device.** Expected after changing `APP_PASSWORD_HASH` or
-`SESSION_SECRET`.
+**Signed out on every device.** Expected after changing `SESSION_SECRET`. Users
+also need to re-enter their AI keys (Settings says so).
+
+**"Sign-in didn't work" after Google or Microsoft.** Check the redirect URI in
+the provider's console matches `APP_URL` exactly, and that the client secret
+hasn't expired. The server log has the provider's error.
 
 **Thumbnails missing.** Delete `CACHE_DIR`; they are regenerated. HEIC photos
 are converted to JPEG on upload.

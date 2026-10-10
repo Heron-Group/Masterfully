@@ -6,6 +6,7 @@ const PORT = Number(process.env.E2E_PORT ?? 3100);
 export default defineConfig({
   testDir: "e2e",
   outputDir: ".cache/playwright",
+  globalSetup: "./e2e/global-setup.ts",
   use: { baseURL: `http://localhost:${PORT}` },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },

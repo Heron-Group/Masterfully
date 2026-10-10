@@ -136,7 +136,7 @@ export class GitSync {
    * Paths that no longer exist are staged as deletions. Returns false if
    * there was nothing to commit. Must be called inside `exclusive()`.
    */
-  async commitPaths(paths: string[], message: string): Promise<boolean> {
+  async commitPaths(paths: string[], message: string, author?: { name: string; email: string }): Promise<boolean> {
     for (const p of paths) {
       const exists = await fs
         .stat(path.join(this.opts.dir, p))
@@ -147,7 +147,13 @@ export class GitSync {
     }
     const staged = await this.git.diff(["--cached", "--name-only"]);
     if (!staged.trim()) return false;
-    await this.git.commit(message);
+    if (author) {
+      // Each user's changes are committed under their own name.
+      const clean = (s: string) => s.replace(/[<>\r\n]/g, "").trim();
+      await this.git.raw(["commit", "-q", "-m", message, "--author", `${clean(author.name) || "User"} <${clean(author.email) || "user@localhost"}>`]);
+    } else {
+      await this.git.commit(message);
+    }
     this.schedulePush();
     return true;
   }

@@ -8,7 +8,8 @@ import { SESSION_COOKIE, sessionKeysFromEnv, verifySessionToken } from "@/lib/au
  */
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (pathname === "/login") return NextResponse.next();
+  // The sign-in page and the Google/Microsoft sign-in routes.
+  if (pathname === "/login" || pathname.startsWith("/api/auth/")) return NextResponse.next();
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (await verifySessionToken(sessionKeysFromEnv(), token)) return NextResponse.next();
