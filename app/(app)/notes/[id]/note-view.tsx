@@ -233,7 +233,7 @@ function Attachments({ note }: { note: NoteDto }) {
       {attachments.length ? (
         <AttachmentList attachments={attachments} onRemove={remove} />
       ) : (
-        <p className="text-sm text-faint">Images, PDFs and other files you add appear here.</p>
+        <p className="text-sm text-faint">Files you add appear here.</p>
       )}
       {error && (
         <p role="alert" className="mt-2 text-sm text-danger">

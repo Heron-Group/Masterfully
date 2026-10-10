@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ui } from "@/components/ui";
 import { formatAuthors, SOURCE_TYPE_OPTIONS, type GroupRefDto, type SourceDto } from "@/lib/dto";
+import { EmptyState } from "@/components/empty-state";
 
 /** Lower-case and strip accents so "muller" finds "Müller". */
 export function fold(text: string): string {
@@ -33,10 +34,7 @@ export function LibraryView({ sources, groups }: { sources: SourceDto[]; groups:
 
   if (!sources.length) {
     return (
-      <div className="py-16 text-center">
-        <p className="font-serif text-xl">Your library is empty.</p>
-        <p className="mt-2 text-sm text-muted">Add a book, article or web page with a link, a PDF, or both.</p>
-      </div>
+      <EmptyState label="Your library is empty." />
     );
   }
 

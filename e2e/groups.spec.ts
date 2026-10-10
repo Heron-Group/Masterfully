@@ -20,7 +20,7 @@ test.afterAll(async ({ browser }) => {
   if (!groupUrl) return;
   const page = await browser.newPage();
   await signIn(page, "/groups");
-  await page.getByText(/sources?$|No reading groups yet/).first().waitFor();
+  await page.getByText(/sources?$/).or(page.getByRole("img", { name: "No reading groups yet." })).first().waitFor();
   for (const link of await page.getByRole("link", { name: /E2E Methods/ }).all()) {
     const href = await link.getAttribute("href");
     if (!href) continue;

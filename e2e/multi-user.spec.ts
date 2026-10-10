@@ -41,7 +41,7 @@ test("each user has a private workspace", async ({ browser }) => {
 
   // Bo sees an empty library and can't open Ada's source, its files or its summary.
   const bo = await userPage(browser, `bo-${stamp}@example.com`, "/library");
-  await expect(bo.getByText("Your library is empty")).toBeVisible();
+  await expect(bo.getByRole("img", { name: "Your library is empty." })).toBeVisible();
   await expect(bo.getByText(title)).toHaveCount(0);
   // (Streamed pages answer 200 and then render the not-found page.)
   await bo.goto(sourceUrl);
@@ -110,8 +110,8 @@ test("Settings sits at the bottom of the sidebar; data downloads as a zip", asyn
   const email = `export-${stamp}@example.com`;
   await signInAs(page, email, "/settings");
   const main = page.getByRole("navigation", { name: "Main" }).filter({ visible: true });
-  await expect(main.getByRole("link", { name: "Settings" })).toHaveCount(0);
-  await expect(page.getByRole("navigation", { name: "Account" }).getByRole("link", { name: "Settings" })).toBeVisible();
+  await expect(main.getByRole("button", { name: "Settings" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Account" }).getByRole("button", { name: "Settings" })).toBeVisible();
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),

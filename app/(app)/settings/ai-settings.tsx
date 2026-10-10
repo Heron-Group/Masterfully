@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink, KeyRound, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ui } from "@/components/ui";
 import type { AiProvider, AiSettingsView } from "@/lib/ai/user-config";
@@ -14,6 +15,7 @@ const PROVIDERS: { id: AiProvider; label: string; keyUrl: string; keyPlaceholder
 const DEFAULTS: Record<AiProvider, string> = { anthropic: "claude-opus-5-5", openai: "gpt-5.5" };
 
 export function AiSettings({ initial }: { initial: AiSettingsView }) {
+  const router = useRouter();
   const [settings, setSettings] = useState(initial);
   const [shown, setShown] = useState<AiProvider>(initial.provider ?? "anthropic");
   const [replacing, setReplacing] = useState(false);
@@ -36,6 +38,7 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
         return;
       }
       setSettings(r.settings);
+      router.refresh(); // so the settings window shows this when reopened
       if (r.warning) setMessage({ kind: "info", text: r.warning });
       done?.();
     });

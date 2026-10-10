@@ -31,7 +31,7 @@ test.afterAll(async ({ browser }, testInfo) => {
   handRemove(`groups/${GROUP}.md`);
   const page = await browser.newPage();
   await signIn(page, "/library");
-  await page.getByText(/sources$|Your library is empty/).first().waitFor();
+  await page.getByText(/sources$/).or(page.getByRole("img", { name: "Your library is empty." })).first().waitFor();
   // Remove any sources left by a failed run.
   for (const link of await page.getByRole("link", { name: /^E2E Graphic Language/ }).all()) {
     const href = await link.getAttribute("href");

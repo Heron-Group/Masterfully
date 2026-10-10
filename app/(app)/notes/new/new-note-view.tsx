@@ -146,7 +146,7 @@ export function NewNoteView() {
             }
           />
         ) : (
-          <p className="text-sm text-faint">Images, PDFs and other files you add appear here.</p>
+          <p className="text-sm text-faint">Files you add appear here.</p>
         )}
       </section>
 

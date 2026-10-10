@@ -5,6 +5,7 @@ import { ui } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { getContentStore } from "@/lib/content";
 import { formatShortDate } from "@/lib/time";
+import { EmptyState } from "@/components/empty-state";
 
 export const metadata: Metadata = { title: "Reading groups" };
 
@@ -29,10 +30,7 @@ async function GroupList() {
   const groups = await (await getContentStore()).listGroups();
   if (!groups.length) {
     return (
-      <div className="py-16 text-center">
-        <p className="font-serif text-xl">No reading groups yet.</p>
-        <p className="mt-2 text-sm text-muted">Groups collect sources around a theme. A source can belong to several groups.</p>
-      </div>
+      <EmptyState label="No reading groups yet." />
     );
   }
   return (

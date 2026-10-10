@@ -120,12 +120,10 @@ export function Composer({ onPosted, ref }: { onPosted: (entry: EntryDto) => voi
               ariaLabel="New journal entry"
             />
           </div>
-          <div className="mt-1 flex items-center justify-between">
-            <div className="-ml-1.5">
+          <div className="mt-1 flex items-center justify-end">
+            <div className="flex items-center gap-1">
+              {progress !== null && progress < 1 && <span className="mr-1 text-xs tabular-nums text-muted">{Math.round(progress * 100)}%</span>}
               <AttachButton onFiles={addFiles} />
-            </div>
-            <div className="flex items-center gap-2">
-              {progress !== null && progress < 1 && <span className="text-xs tabular-nums text-muted">{Math.round(progress * 100)}%</span>}
               <button
                 type="button"
                 onClick={post}

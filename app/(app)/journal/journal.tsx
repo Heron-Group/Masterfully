@@ -6,6 +6,7 @@ import { formatDayHeading, londonDateKey } from "@/lib/time";
 import { jsonFetch } from "@/lib/upload-client";
 import { Composer, type ComposerHandle } from "./composer";
 import { EntryItem } from "./entry-item";
+import { EmptyState } from "@/components/empty-state";
 
 /**
  * The journal timeline: oldest at the top, newest at the bottom.
@@ -126,10 +127,7 @@ export function Journal({ initial }: { initial: JournalPage }) {
           ) : null}
 
           {entries.length === 0 && !hasMore && (
-            <div className="py-24 text-center">
-              <p className="font-serif text-xl">Nothing here yet.</p>
-              <p className="mt-2 text-sm text-muted">Write your first note below. Paste or drop images and files to attach them.</p>
-            </div>
+            <EmptyState label="Nothing here yet. Write your first entry below." className="py-24" />
           )}
 
           {groupByDay(entries).map(({ day, items }) => (

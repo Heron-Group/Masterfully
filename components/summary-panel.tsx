@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Sparkles, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -8,6 +7,7 @@ import type { AiEvent, AiSummaryDto } from "@/lib/dto";
 import { formatShortDate } from "@/lib/time";
 import { Markdown } from "./markdown";
 import { CONTENT_CHANGED_EVENT } from "./content-events";
+import { useSettings } from "./settings-dialog";
 import { ui } from "./ui";
 
 type Run =
@@ -34,6 +34,7 @@ export function SummaryPanel({
   emptyHint: string;
 }) {
   const router = useRouter();
+  const settings = useSettings();
   const [run, setRun] = useState<Run>({ state: "idle" });
   const [warning, setWarning] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -145,9 +146,9 @@ export function SummaryPanel({
               </button>
             )}
             {run.code === "not_configured" && (
-              <Link href="/settings#ai" className={ui.btnSecondary}>
+              <button type="button" onClick={() => settings.open("ai")} className={ui.btnSecondary}>
                 Open Settings
-              </Link>
+              </button>
             )}
             {run.code !== "not_configured" && (
               <button type="button" onClick={() => void generate()} className={ui.btnGhost}>

@@ -7,6 +7,7 @@ import { ui } from "@/components/ui";
 import type { NoteListItemDto } from "@/lib/dto";
 import { formatShortDate } from "@/lib/time";
 import { fold } from "../library/library-view";
+import { EmptyState } from "@/components/empty-state";
 
 /** First line of a note's text, without Markdown markers, for the list. */
 function preview(text: string): string {
@@ -28,10 +29,7 @@ export function NotesView({ notes }: { notes: NoteListItemDto[] }) {
 
   if (!notes.length) {
     return (
-      <div className="py-16 text-center">
-        <p className="font-serif text-xl">No notes yet.</p>
-        <p className="mt-2 text-sm text-muted">Notes are for longer pieces of writing, with attachments and an optional AI summary.</p>
-      </div>
+      <EmptyState label="No notes yet." />
     );
   }
 

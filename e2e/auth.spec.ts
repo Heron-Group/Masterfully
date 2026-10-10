@@ -47,3 +47,26 @@ test("colour mode is set in Settings and persists", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(html).toHaveAttribute("data-theme", "dark");
 });
+
+test("Settings opens in a window over the page, with sections", async ({ page }) => {
+  await signIn(page, "/library");
+  // The sidebar on wide screens, the icon bar on phones.
+  await page.getByRole("button", { name: "Settings" }).filter({ visible: true }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(/\/library$/); // still on the same page
+  await expect(dialog.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Appearance" }).click();
+  await dialog.getByRole("radio", { name: "Dark" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await dialog.getByRole("radio", { name: "Match system" }).click();
+
+  await dialog.getByRole("button", { name: "AI summaries" }).click();
+  await expect(dialog.getByLabel("Model")).toBeVisible();
+  await dialog.getByRole("button", { name: "Your data" }).click();
+  await expect(dialog.getByRole("link", { name: "Download your data" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});

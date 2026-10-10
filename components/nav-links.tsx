@@ -3,6 +3,8 @@
 import { Library, NotebookPen, Settings, SquareStack, StickyNote, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ComponentProps } from "react";
+import { useSettings } from "./settings-dialog";
 
 export const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/journal", label: "Journal", icon: NotebookPen },
@@ -40,14 +42,17 @@ export function NavList({
   active?: (href: string) => boolean;
 }) {
   const items = itemsFor(part);
+  const settings = useSettings();
+  // Settings opens in a window over the page; it counts as current while open.
+  const isCurrent = (href: string) => (href === "/settings" ? settings.isOpen || active(href) : active(href));
   if (variant === "bar") {
     return (
       <ul className="flex items-center gap-1">
         {items.map(({ href, label, icon: Icon }) => {
-          const current = active(href);
+          const current = isCurrent(href);
           return (
             <li key={href}>
-              <Link
+              <NavItem
                 href={href}
                 aria-current={current ? "page" : undefined}
                 aria-label={label}
@@ -58,7 +63,7 @@ export function NavList({
               >
                 <Icon size={18} strokeWidth={1.6} aria-hidden="true" className={current ? "text-accent" : undefined} />
                 <span className={current ? "inline" : "sr-only"}>{label}</span>
-              </Link>
+              </NavItem>
             </li>
           );
         })}
@@ -68,10 +73,10 @@ export function NavList({
   return (
     <ul className="space-y-0.5">
       {items.map(({ href, label, icon: Icon }) => {
-        const current = active(href);
+        const current = isCurrent(href);
         return (
           <li key={href}>
-            <Link
+            <NavItem
               href={href}
               aria-current={current ? "page" : undefined}
               className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[15px] transition-colors ${
@@ -80,10 +85,35 @@ export function NavList({
             >
               <Icon size={18} strokeWidth={1.6} aria-hidden="true" className={current ? "text-accent" : undefined} />
               {label}
-            </Link>
+            </NavItem>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** A link, except Settings, which opens the settings window. */
+function NavItem({ href, children, ...rest }: ComponentProps<typeof Link> & { href: string }) {
+  const settings = useSettings();
+  if (href === "/settings") {
+    const { className, title } = rest;
+    return (
+      <button
+        type="button"
+        onClick={() => settings.open()}
+        aria-haspopup="dialog"
+        aria-label={rest["aria-label"]}
+        title={title}
+        className={`w-full text-left ${className ?? ""}`}
+      >
+        {children}
+      </button>
+    );
+  }
+  return (
+    <Link href={href} {...rest}>
+      {children}
+    </Link>
   );
 }
