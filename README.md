@@ -250,6 +250,10 @@ npm run build
 Then press **Restart App** in the Node.js panel. (`npm run build` also copies
 static files into `.next/standalone`; `server.js` starts that build.)
 
+**Without SSH** (or with a chrooted shell, which can't see Plesk's Node): in
+the Node.js panel, open **Run script**, run `plesk-build` (it installs the
+build tools and builds), then press **Restart App**. Repeat after each update.
+
 ### 5. Web server directives
 
 **Websites & Domains → research.example.com → Apache & nginx Settings →

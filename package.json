@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build && node scripts/postbuild.mjs",
     "start": "node server.js",
+    "plesk-build": "npm ci --include=dev && npm run build",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
