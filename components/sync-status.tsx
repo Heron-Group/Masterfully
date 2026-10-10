@@ -24,7 +24,7 @@ const DOT: Record<Status["state"], string> = {
   local: "bg-faint",
 };
 
-export function SyncStatus() {
+export function SyncStatus({ placement = "down" }: { placement?: "down" | "up" }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -83,10 +83,10 @@ export function SyncStatus() {
         className="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs text-muted transition-colors hover:text-ink"
       >
         <span className={`inline-block size-1.5 rounded-full ${status ? DOT[state] : "bg-faint"}`} />
-        <span className="hidden sm:inline">{status ? LABELS[state] : "…"}</span>
+        <span className={placement === "up" ? "inline" : "hidden sm:inline"}>{status ? LABELS[state] : "…"}</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-md border border-rule bg-surface p-4 text-sm shadow-lg shadow-black/5">
+        <div className={`absolute z-40 w-72 rounded-md border border-rule bg-surface p-4 text-sm shadow-lg shadow-black/5 ${placement === "up" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"}`}>
           <p className="font-medium">{status ? LABELS[state] : "Checking…"}</p>
           <p className="mt-1 text-muted">
             {state === "local" && "No GitHub remote is configured. Changes are committed locally."}

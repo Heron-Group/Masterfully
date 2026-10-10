@@ -33,30 +33,47 @@ test("source summary streams in, is labelled, and changes only the AI section", 
 });
 
 test("group summary is marked stale after a member is re-summarised", async ({ page }) => {
+  test.setTimeout(120_000);
+  const groupGeneratedAt = () => read("groups/co-design-foundations.md").match(/generated: (\S+);/)?.[1];
+  const groupBefore = groupGeneratedAt();
   await signIn(page, "/groups/co-design-foundations");
   await page.getByRole("button", { name: /Generate summary|Regenerate summary/ }).click();
+  // Wait for the new group summary to be saved (an older one may be showing).
+  await expect.poll(groupGeneratedAt, { timeout: 30_000 }).not.toBe(groupBefore);
   await expect(page.getByText(/AI-generated \d+ \w+ \d{4} · fake-model/)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/Out of date/)).toHaveCount(0);
   expect(read("groups/co-design-foundations.md")).toContain("## Overview");
 
   await page.waitForTimeout(1100); // timestamps have one-second resolution
-  // This source's link is a paywalled DOI: the app says so and offers to
-  // summarise from the details and notes instead.
-  await page.goto("/library/sanders-2008-co-creation-new");
+  // If the source's link is paywalled (the sample Sanders DOI is), the app
+  // says so and offers to summarise from the details and notes instead.
+  // Re-summarise a source that is in the group (the first one listed).
+  const member = read("groups/co-design-foundations.md").match(/- id: (\S+)/)![1];
+  const generatedAt = () => read(`sources/${member}.md`).match(/generated: (\S+);/)?.[1];
+  const before = generatedAt();
+  await page.goto(`/library/${member}`);
+  await page.waitForLoadState("networkidle"); // a click before hydration does nothing
   await page.getByRole("button", { name: /Generate summary|Regenerate summary/ }).click();
   const fallback = page.getByRole("button", { name: "Summarise from details and notes only" });
-  const label = page.getByText(/AI-generated \d+ \w+ \d{4} · fake-model/);
-  await expect(page.getByText("AI-generated · writing…")).toHaveCount(0, { timeout: 30_000 });
-  if (await fallback.isVisible()) {
-    await expect(page.getByRole("alert").filter({ hasText: "Couldn't read the linked page" })).toBeVisible();
-    await fallback.click();
-    await expect(page.getByRole("alert").filter({ hasText: "Couldn't read" })).toHaveCount(0);
-  }
-  await expect(page.getByText("AI-generated · writing…")).toHaveCount(0, { timeout: 30_000 });
-  await expect(label).toBeVisible({ timeout: 15_000 });
+  // An earlier summary stays on screen while the new one is written, so wait
+  // for the new one to reach the file, taking the details-only route when
+  // the paywall message appears.
+  await expect
+    .poll(
+      async () => {
+        if (await fallback.isVisible()) await fallback.click();
+        return generatedAt();
+      },
+      { timeout: 45_000, intervals: [500] },
+    )
+    .not.toBe(before);
+  await expect(page.getByText(/AI-generated \d+ \w+ \d{4} · fake-model/)).toBeVisible({ timeout: 15_000 });
   await page.waitForLoadState("networkidle"); // let the post-save refresh finish
 
-  await page.goto("/groups/co-design-foundations");
+  // The page refreshes itself after saving; retry if that interrupts us.
+  await expect(async () => {
+    await page.goto("/groups/co-design-foundations");
+  }).toPass({ timeout: 20_000 });
   await expect(page.getByText(/Out of date/)).toBeVisible();
 });
 

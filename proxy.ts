@@ -28,6 +28,6 @@ export const config = {
     // (/api/upload/...) are excluded too: proxy buffers request bodies and
     // truncates them at 10 MB, so those handlers check the session
     // themselves before reading the body.
-    "/((?!_next/static|_next/image|favicon\\.ico|icon|apple-icon|manifest\\.webmanifest|api/upload/).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|icon|apple-icon|manifest\\.webmanifest|pdfjs/|api/upload/).*)",
   ],
 };

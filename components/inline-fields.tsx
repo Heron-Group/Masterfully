@@ -143,12 +143,14 @@ export function InlineSelect<T extends string>({
   options,
   onSave,
   ariaLabel,
+  className = "",
 }: {
   id?: string;
   value: T;
   options: { value: T; label: string }[];
   onSave: (value: T) => void;
   ariaLabel: string;
+  className?: string;
 }) {
   return (
     <select
@@ -156,7 +158,7 @@ export function InlineSelect<T extends string>({
       value={value}
       onChange={(e) => onSave(e.target.value as T)}
       aria-label={ariaLabel}
-      className={`${fieldBase} w-auto cursor-pointer appearance-none pr-5`}
+      className={`${fieldBase} w-auto cursor-pointer appearance-none pr-5 ${className}`}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>

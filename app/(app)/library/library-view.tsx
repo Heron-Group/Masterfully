@@ -1,5 +1,6 @@
 "use client";
 
+import { FileText, Globe } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ui } from "@/components/ui";
@@ -87,17 +88,41 @@ export function LibraryView({ sources, groups }: { sources: SourceDto[]; groups:
 
 export function SourceRow({ source: s }: { source: SourceDto }) {
   return (
-    <Link href={`/library/${s.id}`} className="group block py-3.5">
-      <span className="block font-serif text-[17px] leading-snug text-ink group-hover:underline group-hover:decoration-rule group-hover:underline-offset-4">
-        {s.title}
-      </span>
-      <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
-        {s.authors.length > 0 && <span>{formatAuthors(s.authors)}</span>}
-        {s.year && <span className="tabular-nums">{s.year}</span>}
-        <span className={ui.badge}>{typeLabel(s.type)}</span>
-        {s.pdf && <span className={ui.badge}>PDF</span>}
-        {s.aiSummary && <span className={ui.badge}>Summary</span>}
-      </span>
-    </Link>
+    <div className="group flex items-start gap-3 py-3.5">
+      <Link href={`/library/${s.id}`} className="min-w-0 flex-1">
+        <span className="block font-serif text-[17px] leading-snug text-ink group-hover:underline group-hover:decoration-rule group-hover:underline-offset-4">
+          {s.title}
+        </span>
+        <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+          {s.authors.length > 0 && <span>{formatAuthors(s.authors)}</span>}
+          {s.year && <span className="tabular-nums">{s.year}</span>}
+          <span className={ui.badge}>{typeLabel(s.type)}</span>
+          {s.aiSummary && <span className={ui.badge}>Summary</span>}
+        </span>
+      </Link>
+      {/* Open straight into the reading panel, beside the notes. */}
+      <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+        {s.pdf && (
+          <Link
+            href={`/library/${s.id}?read=pdf`}
+            title="Read the PDF beside your notes"
+            aria-label={`Read the PDF of ${s.title}`}
+            className="rounded-md p-1.5 text-muted transition-colors hover:bg-accent-soft hover:text-ink"
+          >
+            <FileText size={17} strokeWidth={1.6} aria-hidden="true" />
+          </Link>
+        )}
+        {s.url && (
+          <Link
+            href={`/library/${s.id}?read=link`}
+            title="Read the web page beside your notes"
+            aria-label={`Read the web page for ${s.title}`}
+            className="rounded-md p-1.5 text-muted transition-colors hover:bg-accent-soft hover:text-ink"
+          >
+            <Globe size={17} strokeWidth={1.6} aria-hidden="true" />
+          </Link>
+        )}
+      </div>
+    </div>
   );
 }

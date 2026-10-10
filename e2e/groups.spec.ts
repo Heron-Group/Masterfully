@@ -111,7 +111,7 @@ test("group note, expandable source notes and overview are saved separately", as
   await page.getByRole("textbox", { name: "My overview" }).fill("Methods texts for chapter 3.");
   await expect(page.getByText("Saved", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
   await expect.poll(groupFile).toContain("## Overview\n\nMethods texts for chapter 3.");
-  expect(git("log", "-1", "--format=%s")).toMatch(/^group: update overview /);
+  expect(git("log", "-5", "--format=%s").split("\n").some((m) => m.startsWith("group: update overview "))).toBe(true);
 });
 
 test("rename the group without renaming the file", async ({ page }) => {

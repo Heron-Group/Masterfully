@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "hash-password": "node scripts/hash-password.mjs",
     "test:e2e": "playwright test",
-    "seed-dev": "node scripts/seed-dev-content.mjs 160 --library"
+    "seed-dev": "node scripts/seed-dev-content.mjs 160 --library",
+    "postinstall": "node scripts/copy-pdf-worker.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
@@ -32,7 +33,9 @@
     "gray-matter": "^4.0.3",
     "heic-convert": "^2.1.0",
     "linkedom": "^0.18.13",
+    "lucide-react": "^1.55.0",
     "next": "16.4.0",
+    "pdfjs-dist": "^6.4.299",
     "proper-lockfile": "^4.1.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",

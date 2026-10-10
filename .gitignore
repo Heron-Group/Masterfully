@@ -44,3 +44,6 @@ next-env.d.ts
 # local content and caches
 /.dev-content/
 /.cache/
+
+# copied from pdfjs-dist on install
+/public/pdfjs/

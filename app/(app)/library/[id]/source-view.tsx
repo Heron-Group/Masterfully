@@ -1,9 +1,11 @@
 "use client";
 
+import { BookOpen, Download, ExternalLink, FilePlus2, FileText, Globe, Link2, Pencil, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { InlineSelect, InlineText, InlineTitle, PropertyRow, useInlineSave } from "@/components/inline-fields";
+import { useCallback, useState, useTransition } from "react";
+import { InlineSelect, InlineText, InlineTitle, useInlineSave } from "@/components/inline-fields";
 import { LiveEditor } from "@/components/live-editor/live-editor";
+import { ReaderPanel, type ReaderTab } from "@/components/reader-panel";
 import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
 import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
@@ -17,7 +19,44 @@ function changed() {
   window.dispatchEvent(new Event(CONTENT_CHANGED_EVENT));
 }
 
-export function SourceView({ source, allGroups }: { source: SourceDto; allGroups: GroupRefDto[] }) {
+export type ReadKind = ReaderTab["key"];
+
+function readerTabs(source: SourceDto): ReaderTab[] {
+  const tabs: ReaderTab[] = [];
+  if (source.pdf) {
+    tabs.push({ key: "pdf", label: "PDF", src: source.pdf.url, openUrl: source.pdf.url, downloadUrl: source.pdf.downloadUrl });
+  }
+  if (source.url) {
+    tabs.push({ key: "link", label: "Web page", src: `/api/reader/${encodeURIComponent(source.id)}`, openUrl: source.url });
+  }
+  return tabs;
+}
+
+export function SourceView({
+  source,
+  allGroups,
+  initialRead,
+}: {
+  source: SourceDto;
+  allGroups: GroupRefDto[];
+  initialRead?: ReadKind;
+}) {
+  const tabs = readerTabs(source);
+  const [reading, setReadingState] = useState<ReadKind | null>(
+    initialRead && tabs.some((t) => t.key === initialRead) ? initialRead : null,
+  );
+  // Keep ?read= in the address so a refresh (or a link from the library) reopens the panel.
+  const setReading = useCallback((kind: ReadKind | null) => {
+    setReadingState(kind);
+    const url = new URL(window.location.href);
+    if (kind) url.searchParams.set("read", kind);
+    else url.searchParams.delete("read");
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+  const close = useCallback(() => setReading(null), [setReading]);
+  // Close the panel if what it shows is removed.
+  const open = reading && tabs.some((t) => t.key === reading) ? reading : null;
+
   if (source.problem) {
     return (
       <div className="mt-6 rounded-md bg-warn/10 px-4 py-3 text-sm">
@@ -30,14 +69,16 @@ export function SourceView({ source, allGroups }: { source: SourceDto; allGroups
     );
   }
   return (
-    <article className="mt-4 space-y-12">
-      <Details source={source} />
-      <PdfSection source={source} />
-      <NotesSection source={source} />
-      <SourceSummaryPanel source={source} />
-      <GroupsSection source={source} allGroups={allGroups} />
-      <DeleteSection source={source} />
-    </article>
+    <>
+      <article className="mt-4 space-y-10">
+        <Details source={source} />
+        <MaterialSection source={source} reading={open} onRead={setReading} />
+        <NotesSection source={source} />
+        <SourceSummaryPanel source={source} />
+        <GroupsSection source={source} allGroups={allGroups} />
+      </article>
+      {open && <ReaderPanel title={source.title} tabs={tabs} active={open} onTab={setReading} onClose={close} />}
+    </>
   );
 }
 
@@ -50,7 +91,21 @@ function ErrorText({ result }: { result: ActionResult | null }) {
   );
 }
 
-/** Title and properties, edited in place like a Notion page. */
+const metaValue = "text-[13px] leading-5 text-muted hover:text-ink focus:text-ink";
+
+/** A compact, muted row in the details block. */
+function Meta({ label, htmlFor, className = "", children }: { label: string; htmlFor?: string; className?: string; children: React.ReactNode }) {
+  return (
+    <div className={`grid grid-cols-[4.25rem_1fr] items-start gap-x-2 ${className}`}>
+      <label htmlFor={htmlFor} className="py-0.5 text-[12px] leading-5 text-faint">
+        {label}
+      </label>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/** Title, then a small block of details edited in place, with delete. */
 function Details({ source }: { source: SourceDto }) {
   const { save, label, isError } = useInlineSave();
   const update = (props: SourceProps) =>
@@ -64,56 +119,137 @@ function Details({ source }: { source: SourceDto }) {
     <header>
       <h1 className="sr-only">{source.title}</h1>
       <InlineTitle value={source.title} onSave={(title) => void update({ title })} ariaLabel="Title" />
-      <div className="mt-4 space-y-0.5">
-        <PropertyRow label="Authors" htmlFor="prop-authors">
-          <InlineText
-            id="prop-authors"
-            multiline
-            value={source.authors.join("\n")}
-            onSave={(v) => void update({ authors: v.split(/\r?\n/) })}
-            placeholder="Surname, Firstname — one per line"
-            ariaLabel="Authors"
-          />
-        </PropertyRow>
-        <PropertyRow label="Year" htmlFor="prop-year">
-          <InlineText id="prop-year" value={source.year ? String(source.year) : ""} onSave={(year) => void update({ year })} inputMode="numeric" ariaLabel="Year" className="tabular-nums" />
-        </PropertyRow>
-        <PropertyRow label="Type" htmlFor="prop-type">
-          <InlineSelect<SourceType> id="prop-type" value={source.type} options={SOURCE_TYPE_OPTIONS} onSave={(type) => void update({ type })} ariaLabel="Type" />
-        </PropertyRow>
-        <PropertyRow label="Link" htmlFor="prop-url">
-          <div className="flex items-center gap-1">
-            <InlineText id="prop-url" value={source.url ?? ""} onSave={(url) => void update({ url })} inputMode="url" placeholder="https://" ariaLabel="Link" className="truncate text-accent" />
-            {source.url && (
-              <a href={source.url} target="_blank" rel="noopener noreferrer" title="Open link in a new tab" aria-label="Open link in a new tab" className="shrink-0 rounded px-1.5 text-muted hover:text-ink">
-                ↗
-              </a>
-            )}
-          </div>
-        </PropertyRow>
-        <PropertyRow label="Added">
-          <span className="block px-0 py-0.5 text-muted">{formatShortDate(source.added)}</span>
-        </PropertyRow>
+      <div className="mt-2 flex items-start gap-2">
+        <div className="grid min-w-0 flex-1 gap-y-0 sm:grid-cols-[15rem_minmax(0,1fr)] sm:gap-x-6">
+          <Meta label="Authors" htmlFor="prop-authors" className="sm:col-span-2">
+            <InlineText
+              id="prop-authors"
+              multiline
+              value={source.authors.join("\n")}
+              onSave={(v) => void update({ authors: v.split(/\r?\n/) })}
+              placeholder="Surname, Firstname — one per line"
+              ariaLabel="Authors"
+              className={metaValue}
+            />
+          </Meta>
+          <Meta label="Year" htmlFor="prop-year">
+            <InlineText id="prop-year" value={source.year ? String(source.year) : ""} onSave={(year) => void update({ year })} inputMode="numeric" ariaLabel="Year" className={`${metaValue} tabular-nums`} />
+          </Meta>
+          <Meta label="Type" htmlFor="prop-type">
+            <InlineSelect<SourceType> id="prop-type" value={source.type} options={SOURCE_TYPE_OPTIONS} onSave={(type) => void update({ type })} ariaLabel="Type" className={metaValue} />
+          </Meta>
+          <Meta label="Added">
+            <span className="block py-0.5 text-[13px] leading-5 text-faint">{formatShortDate(source.added)}</span>
+          </Meta>
+        </div>
+        <DeleteControl source={source} />
       </div>
-      <p role={isError ? "alert" : "status"} className={`mt-1 h-4 text-xs ${isError ? "text-danger" : "text-faint"}`}>
-        {label}
-      </p>
+      {label && (
+        <p role={isError ? "alert" : "status"} className={`mt-1 text-xs ${isError ? "text-danger" : "text-faint"}`}>
+          {label}
+        </p>
+      )}
     </header>
   );
 }
 
-function PdfSection({ source }: { source: SourceDto }) {
+/** Bin icon in the details block; asks before deleting. */
+function DeleteControl({ source }: { source: SourceDto }) {
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setConfirming((c) => !c)}
+        aria-label="Delete source…"
+        aria-expanded={confirming}
+        title="Delete source"
+        className="rounded-md p-1.5 text-faint transition-colors hover:bg-danger/10 hover:text-danger"
+      >
+        <Trash2 size={15} strokeWidth={1.7} aria-hidden="true" />
+      </button>
+      {confirming && (
+        <div role="alertdialog" aria-label="Delete source" className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg bg-surface p-4 text-sm shadow-lg shadow-black/10 ring-1 ring-rule">
+          <p>
+            Delete <strong>{source.title}</strong>
+            {source.pdf ? " and its PDF" : ""}? It will also be removed from{" "}
+            {source.groups.length ? `${source.groups.length} group${source.groups.length === 1 ? "" : "s"}` : "any groups"}. Its history stays in Git.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  changed();
+                  setResult(await deleteSource(source.id));
+                })
+              }
+              className={ui.btnDanger}
+            >
+              {pending ? "Deleting…" : "Delete source"}
+            </button>
+            <button type="button" onClick={() => setConfirming(false)} className={ui.btnGhost}>
+              Cancel
+            </button>
+          </div>
+          <ErrorText result={result} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The "Read PDF" / "Read web page" button: opens it beside your notes. */
+function ReadButton({ kind, label, reading, onRead }: { kind: ReadKind; label: string; reading: ReadKind | null; onRead: (k: ReadKind | null) => void }) {
+  const open = reading === kind;
+  const Icon = kind === "pdf" ? BookOpen : Globe;
+  return (
+    <button
+      type="button"
+      onClick={() => onRead(open ? null : kind)}
+      aria-pressed={open}
+      className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors ${
+        open ? "bg-ink text-paper" : "bg-accent-soft/70 text-ink hover:bg-accent-soft"
+      }`}
+    >
+      <Icon size={16} strokeWidth={1.7} aria-hidden="true" />
+      {open ? `Close ${label}` : `Read ${label}`}
+    </button>
+  );
+}
+
+const iconButton = "rounded-md p-1.5 text-muted transition-colors hover:bg-accent-soft hover:text-ink";
+
+/** The source itself: add a PDF or a link, then read it alongside your notes. */
+function MaterialSection({ source, reading, onRead }: { source: SourceDto; reading: ReadKind | null; onRead: (k: ReadKind | null) => void }) {
+  return (
+    <section aria-labelledby="material-heading">
+      <h2 id="material-heading" className={`${ui.h2} mb-2`}>
+        PDF and link
+      </h2>
+      <div className="divide-y divide-rule/70">
+        <PdfRow source={source} reading={reading} onRead={onRead} />
+        <LinkRow source={source} reading={reading} onRead={onRead} />
+      </div>
+    </section>
+  );
+}
+
+function PdfRow({ source, reading, onRead }: { source: SourceDto; reading: ReadKind | null; onRead: (k: ReadKind | null) => void }) {
   const router = useRouter();
   const [progress, setProgress] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  async function uploadPdf(file: File) {
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setError(`"${file.name}" is larger than 50 MB.`);
-      return;
-    }
+  async function uploadPdf(file: File | undefined) {
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) return setError(`"${file.name}" is larger than 50 MB.`);
+    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") return setError(`"${file.name}" isn't a PDF.`);
     setError(null);
     setProgress(0);
     const form = new FormData();
@@ -129,87 +265,194 @@ function PdfSection({ source }: { source: SourceDto }) {
     }
   }
 
-  const picker = (label: string) => (
-    <label className={`${ui.btnSecondary} cursor-pointer`}>
-      {progress !== null ? `Uploading ${Math.round(progress * 100)}%` : label}
-      <input
-        type="file"
-        accept="application/pdf,.pdf"
-        className="sr-only"
-        disabled={progress !== null}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) void uploadPdf(file);
-        }}
-      />
-    </label>
+  const fileInput = (
+    <input
+      type="file"
+      accept="application/pdf,.pdf"
+      className="sr-only"
+      disabled={progress !== null}
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        e.target.value = "";
+        void uploadPdf(file);
+      }}
+    />
   );
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(true);
+    },
+    onDragLeave: () => setDragging(false),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      void uploadPdf(e.dataTransfer.files[0]);
+    },
+  };
 
   return (
-    <section aria-labelledby="pdf-heading">
-      <h2 id="pdf-heading" className={`${ui.h2} mb-3`}>
-        PDF
-      </h2>
+    <div className="py-2.5" {...dropProps}>
       {source.pdf ? (
-        <>
-          <div className="overflow-hidden rounded-lg bg-surface ring-1 ring-rule/60">
-            <iframe
-              key={source.updated}
-              src={source.pdf.url}
-              title={`PDF of ${source.title}`}
-              className="h-[75vh] w-full"
-            />
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <a href={source.pdf.url} target="_blank" rel="noopener" className={ui.btnSecondary}>
-              Open in new tab
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+          <FileText size={17} strokeWidth={1.6} className="shrink-0 text-muted" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => onRead("pdf")}
+            title="Read alongside your notes"
+            className="min-w-[10rem] flex-1 truncate text-left text-[15px] text-ink hover:underline hover:decoration-rule hover:underline-offset-4"
+          >
+            {source.pdf.name}
+          </button>
+          <div className="flex items-center gap-0.5">
+            <ReadButton kind="pdf" label="PDF" reading={reading} onRead={onRead} />
+            <a href={source.pdf.url} target="_blank" rel="noopener" className={iconButton} title="Open in a new tab" aria-label="Open the PDF in a new tab">
+              <ExternalLink size={15} aria-hidden="true" />
             </a>
-            <a href={source.pdf.downloadUrl} className={ui.btnSecondary}>
-              Download
+            <a href={source.pdf.downloadUrl} className={iconButton} title="Download" aria-label="Download the PDF">
+              <Download size={15} aria-hidden="true" />
             </a>
-            {picker("Replace PDF")}
-            {confirmRemove ? (
-              <span className="flex items-center gap-2 text-sm">
-                Remove the PDF?
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() =>
-                    start(async () => {
-                      const r = await removeSourcePdf(source.id);
-                      if (r.ok) changed();
-                      else setError(r.error);
-                      setConfirmRemove(false);
-                    })
-                  }
-                  className={ui.btnDanger}
-                >
-                  Remove
-                </button>
-                <button type="button" onClick={() => setConfirmRemove(false)} className={ui.btnGhost}>
-                  Cancel
-                </button>
-              </span>
-            ) : (
-              <button type="button" onClick={() => setConfirmRemove(true)} className={ui.btnGhost}>
-                Remove PDF
-              </button>
-            )}
+            <label className={`${iconButton} cursor-pointer`} title="Replace PDF" aria-label="Replace PDF">
+              <FilePlus2 size={15} aria-hidden="true" />
+              {fileInput}
+            </label>
+            <button type="button" onClick={() => setConfirmRemove(true)} className={iconButton} title="Remove PDF" aria-label="Remove PDF">
+              <X size={15} aria-hidden="true" />
+            </button>
           </div>
-        </>
+        </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
-          <span>No PDF attached.</span>
-          {picker("Upload PDF")}
+        <label
+          className={`-mx-1.5 flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-[15px] transition-colors hover:bg-accent-soft/70 hover:text-ink ${dragging ? "bg-accent-soft text-ink" : "text-faint"}`}
+        >
+          <FilePlus2 size={17} strokeWidth={1.6} aria-hidden="true" />
+          Add a PDF <span className="text-xs">— click or drop a file, up to 50 MB</span>
+          {fileInput}
+        </label>
+      )}
+      {progress !== null && <p className="mt-1 text-xs text-muted">Uploading {Math.round(progress * 100)}%…</p>}
+      {confirmRemove && (
+        <div role="alertdialog" aria-label="Remove PDF" className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-danger/5 px-3 py-2 text-sm">
+          <span className="mr-auto">Remove the PDF from this source?</span>
+          <button type="button" onClick={() => setConfirmRemove(false)} className={ui.btnGhost}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const r = await removeSourcePdf(source.id);
+                if (r.ok) changed();
+                else setError(r.error);
+                setConfirmRemove(false);
+              })
+            }
+            className={ui.btnDanger}
+          >
+            Remove
+          </button>
         </div>
       )}
       {error && (
-        <p role="alert" className="mt-2 text-sm text-danger">
+        <p role="alert" className="mt-1 text-sm text-danger">
           {error}
         </p>
       )}
-    </section>
+    </div>
+  );
+}
+
+function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: ReadKind | null; onRead: (k: ReadKind | null) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(source.url ?? "");
+  const { save, label, isError } = useInlineSave();
+
+  async function commit(value: string) {
+    setEditing(false);
+    if (value.trim() === (source.url ?? "")) return;
+    await save(async () => {
+      const r = await updateSourceProps(source.id, { url: value });
+      if (r.ok) changed();
+      else setEditing(true);
+      return r;
+    });
+  }
+
+  return (
+    <div className="py-2.5">
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <Link2 size={17} strokeWidth={1.6} className="shrink-0 text-muted" aria-hidden="true" />
+          <input
+            autoFocus
+            type="url"
+            inputMode="url"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => void commit(draft)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                setDraft(source.url ?? "");
+                setEditing(false);
+              }
+            }}
+            placeholder="https://"
+            aria-label="Link"
+            className="-mx-1.5 min-w-0 flex-1 rounded-sm bg-accent-soft px-1.5 py-0.5 text-[15px] text-ink placeholder:text-faint focus:outline-none"
+          />
+        </div>
+      ) : source.url ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+          <Globe size={17} strokeWidth={1.6} className="shrink-0 text-muted" aria-hidden="true" />
+          <a
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={source.url}
+            className="min-w-[10rem] flex-1 truncate text-[15px] text-accent underline decoration-1 underline-offset-2"
+          >
+            {source.url.replace(/^https?:\/\/(www\.)?/, "")}
+          </a>
+          <div className="flex items-center gap-0.5">
+            <ReadButton kind="link" label="web page" reading={reading} onRead={onRead} />
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(source.url ?? "");
+                setEditing(true);
+              }}
+              className={iconButton}
+              title="Edit link"
+              aria-label="Edit link"
+            >
+              <Pencil size={15} aria-hidden="true" />
+            </button>
+            <button type="button" onClick={() => void commit("")} className={iconButton} title="Remove link" aria-label="Remove link">
+              <X size={15} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft("");
+            setEditing(true);
+          }}
+          className="-mx-1.5 flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[15px] text-faint transition-colors hover:bg-accent-soft/70 hover:text-ink"
+        >
+          <Link2 size={17} strokeWidth={1.6} aria-hidden="true" />
+          Add a link <span className="text-xs">— a web page or online article</span>
+        </button>
+      )}
+      {label && (
+        <p role={isError ? "alert" : "status"} className={`mt-1 text-xs ${isError ? "text-danger" : "text-faint"}`}>
+          {label}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -300,48 +543,6 @@ function GroupsSection({ source, allGroups }: { source: SourceDto; allGroups: Gr
         </select>
       )}
       <ErrorText result={result} />
-    </section>
-  );
-}
-
-function DeleteSection({ source }: { source: SourceDto }) {
-  const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<ActionResult | null>(null);
-  const [pending, start] = useTransition();
-  return (
-    <section className="border-t border-rule pt-6">
-      {confirming ? (
-        <div role="alertdialog" aria-label="Delete source" className="rounded-md bg-danger/5 p-4 text-sm">
-          <p>
-            Delete <strong>{source.title}</strong>
-            {source.pdf ? " and its PDF" : ""}? It will also be removed from{" "}
-            {source.groups.length ? `${source.groups.length} group${source.groups.length === 1 ? "" : "s"}` : "any groups"}. Its history stays in Git.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  changed();
-                  setResult(await deleteSource(source.id));
-                })
-              }
-              className={ui.btnDanger}
-            >
-              {pending ? "Deleting…" : "Delete source"}
-            </button>
-            <button type="button" onClick={() => setConfirming(false)} className={ui.btnGhost}>
-              Cancel
-            </button>
-          </div>
-          <ErrorText result={result} />
-        </div>
-      ) : (
-        <button type="button" onClick={() => setConfirming(true)} className="text-sm text-muted hover:text-danger">
-          Delete source…
-        </button>
-      )}
     </section>
   );
 }

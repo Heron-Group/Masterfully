@@ -9,7 +9,7 @@ const TIMEOUT_MS = 20_000;
 const MIN_READABLE_CHARS = 600;
 
 export type FetchedPage =
-  | { ok: true; kind: "html"; text: string; title?: string }
+  | { ok: true; kind: "html"; text: string; title?: string; html?: string; byline?: string; finalUrl?: string }
   | { ok: true; kind: "pdf"; data: Buffer }
   | { ok: false; reason: string };
 
@@ -79,12 +79,20 @@ export async function fetchReadable(rawUrl: string): Promise<FetchedPage> {
       return { ok: true, kind: "pdf", data: body };
     }
     const raw = body.toString("utf8");
-    if (type.includes("text/plain")) return checkLength({ ok: true, kind: "html", text: raw.trim() });
+    if (type.includes("text/plain")) return checkLength({ ok: true, kind: "html", text: raw.trim(), finalUrl: url.toString() });
 
     const { document } = parseHTML(raw);
     const article = new Readability(document as unknown as Document).parse();
     const text = (article?.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
-    return checkLength({ ok: true, kind: "html", text, title: article?.title ?? undefined });
+    return checkLength({
+      ok: true,
+      kind: "html",
+      text,
+      title: article?.title ?? undefined,
+      html: article?.content ?? undefined,
+      byline: article?.byline ?? undefined,
+      finalUrl: url.toString(),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, reason: /timeout|aborted/i.test(message) ? "the site took too long to respond" : message };

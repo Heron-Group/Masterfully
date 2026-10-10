@@ -17,18 +17,19 @@ test.beforeAll(() => {
   handWrite(`groups/${GROUP}.md`, `---\ntitle: "E2E Group ${stamp}"\n---\n## Overview\n\nHand-written.\n`);
 });
 
-test.afterAll(async ({ browser }) => {
+test.afterAll(async ({ browser }, testInfo) => {
+  testInfo.setTimeout(180_000);
   handRemove(`groups/${GROUP}.md`);
   const page = await browser.newPage();
   await signIn(page, "/library");
   await page.getByText(/sources$|Your library is empty/).first().waitFor();
   // Remove any sources left by a failed run.
-  for (const link of await page.getByRole("link", { name: /E2E Graphic Language/ }).all()) {
+  for (const link of await page.getByRole("link", { name: /^E2E Graphic Language/ }).all()) {
     const href = await link.getAttribute("href");
     if (!href) continue;
     await page.goto(href);
     await page.getByRole("button", { name: "Delete source…" }).click();
-    await page.getByRole("button", { name: "Delete source" }).click();
+    await page.getByRole("button", { name: "Delete source", exact: true }).click();
     await page.waitForURL("**/library");
   }
   await page.close();
@@ -51,17 +52,27 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   await page.waitForURL(/\/library\/brody-2025-e2e-graphic/, { timeout: 90_000 });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(TITLE);
   await expect(page.getByLabel("Title", { exact: true }).filter({ visible: true })).toHaveValue(TITLE);
-  await expect(page.getByLabel("Link", { exact: true }).filter({ visible: true })).toHaveValue("https://example.org/paper");
-  await expect(page.getByRole("link", { name: "Open link in a new tab" })).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("link", { name: "example.org/paper" })).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("button", { name: "Read web page" })).toBeVisible();
 
-  const iframe = page.locator("iframe");
-  const src = await iframe.getAttribute("src");
+  // Read the PDF in the side panel (pdf.js renders it as pages with text).
+  await page.getByRole("button", { name: "Read PDF" }).click();
+  const panel = page.getByRole("complementary", { name: `Reading: ${TITLE}` });
+  await expect(panel.getByText("Page 1 of 1")).toBeVisible({ timeout: 30_000 });
+  await expect(panel.locator(".textLayer")).toContainText(`Forty megabytes ${stamp}`, { timeout: 30_000 });
+  expect(page.url()).toContain("?read=pdf");
+  const src = await panel.getByRole("link", { name: "Open in a new tab" }).getAttribute("href");
   const res = await page.request.get(src!, { headers: { Range: "bytes=0-1023" } });
   expect(res.status()).toBe(206);
   expect(res.headers()["content-type"]).toBe("application/pdf");
   expect(res.headers()["content-range"]).toMatch(/\/4194\d{4}$/);
+  await panel.getByRole("button", { name: "Close reading panel" }).click();
+  await expect(panel).toHaveCount(0);
 
-  const id = page.url().split("/").pop()!;
+  const id = page.url().split("/").pop()!.split("?")[0];
+  // The web-page reader serves third-party HTML, so it must be sandboxed.
+  const reader = await page.request.get(`/api/reader/${id}`);
+  expect(reader.headers()["content-security-policy"]).toMatch(/^sandbox .*default-src 'none'/);
   const files = git("show", "--name-only", "--format=%s", "HEAD").split("\n").filter(Boolean);
   expect(files[0]).toBe(`source: add ${id}`);
   expect(files).toContain(`attachments/sources/${id}.pdf`);
@@ -69,22 +80,25 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   await expect(page.getByRole("link", { name: `E2E Group ${stamp}` })).toBeVisible();
 });
 
-test("library search and filters", async ({ page }) => {
+test("library search and filters; open a source straight into the reader", async ({ page }) => {
   await signIn(page, "/library");
+  await page.getByRole("link", { name: new RegExp(`Read the PDF of ${TITLE}`) }).click();
+  await expect(page.getByRole("complementary", { name: `Reading: ${TITLE}` }).getByText("Page 1 of 1")).toBeVisible({ timeout: 30_000 });
+  await page.goto("/library");
   await page.getByLabel("Search sources").fill("muller");
-  await expect(page.getByRole("link", { name: new RegExp(TITLE) })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(`^${TITLE}`) })).toBeVisible();
   await page.getByLabel("Search sources").fill("no such source zzz");
   await expect(page.getByText("No sources match.")).toBeVisible();
   await page.getByLabel("Search sources").fill("");
   await page.getByLabel("Filter by group").selectOption(GROUP);
-  await expect(page.getByRole("link", { name: new RegExp(TITLE) })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(`^${TITLE}`) })).toBeVisible();
   await page.getByLabel("Filter by type").selectOption("book");
   await expect(page.getByText("No sources match.")).toBeVisible();
 });
 
 test("notes autosave exactly as typed and survive a reload", async ({ page }) => {
   await signIn(page, "/library");
-  await page.getByRole("link", { name: new RegExp(TITLE) }).click();
+  await page.getByRole("link", { name: new RegExp(`^${TITLE}`) }).click();
   await page.waitForURL(/\/library\/brody-/);
   const id = page.url().split("/").pop()!;
   const notes = page.getByRole("textbox", { name: "My notes" });
@@ -98,7 +112,7 @@ test("notes autosave exactly as typed and survive a reload", async ({ page }) =>
 
 test("edit details, leave and rejoin a group", async ({ page }) => {
   await signIn(page, "/library");
-  await page.getByRole("link", { name: new RegExp(TITLE) }).click();
+  await page.getByRole("link", { name: new RegExp(`^${TITLE}`) }).click();
   await page.waitForURL(/\/library\/brody-/);
   const id = page.url().split("/").pop()!;
   await page.getByLabel("Year", { exact: true }).filter({ visible: true }).fill("2024");
@@ -116,13 +130,13 @@ test("edit details, leave and rejoin a group", async ({ page }) => {
 
 test("delete a source removes its PDF and group membership", async ({ page }) => {
   await signIn(page, "/library");
-  await page.getByRole("link", { name: new RegExp(TITLE) }).click();
+  await page.getByRole("link", { name: new RegExp(`^${TITLE}`) }).click();
   await page.waitForURL(/\/library\/brody-/);
   const id = page.url().split("/").pop()!;
   await page.getByRole("button", { name: "Delete source…" }).click();
-  await page.getByRole("button", { name: "Delete source" }).click();
+  await page.getByRole("button", { name: "Delete source", exact: true }).click();
   await page.waitForURL("**/library");
-  await expect(page.getByRole("link", { name: new RegExp(TITLE) })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: new RegExp(`^${TITLE}`) })).toHaveCount(0);
   const files = git("show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort();
   expect(files).toEqual([`attachments/sources/${id}.pdf`, `groups/${GROUP}.md`, `sources/${id}.md`].sort());
 });
@@ -131,4 +145,5 @@ test("signed out, sources and PDFs are unreachable", async ({ request }) => {
   expect((await request.get("/library", { maxRedirects: 0 })).status()).toBe(307);
   expect((await request.get("/api/files/attachments/sources/x.pdf")).status()).toBe(401);
   expect((await request.post("/api/upload/sources", { multipart: { title: "x" } })).status()).toBe(401);
+  expect((await request.get("/api/reader/ingold-2013-making")).status()).toBe(401);
 });

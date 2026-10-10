@@ -193,3 +193,7 @@ body {
 .live-editor .cm-md-hr { display: inline-block; width: 100%; border-top: 1px solid var(--rule); vertical-align: middle; }
 /* Let a min-height on the editor make the whole area clickable. */
 .live-editor .cm-editor, .live-editor .cm-scroller, .live-editor .cm-content { min-height: inherit; }
+
+/* App shell: the phone top bar's height, zero once the sidebar shows. */
+.app-shell { --header-height: calc(3rem + 1px + env(safe-area-inset-top)); }
+@media (min-width: 768px) { .app-shell { --header-height: 0px; } }
