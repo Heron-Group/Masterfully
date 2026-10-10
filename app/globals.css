@@ -13,7 +13,11 @@
   --muted: #6c675e;
   --faint: #9d978c;
   --rule: #e7e3da;
-  --accent: #36557f;
+  /* Masterfully orange: focus rings, checkboxes, the post button, the
+     current page in the sidebar. Text links use a deeper shade in light mode
+     so small text keeps at least 4.5:1 contrast (#FF4A00 is 3.2:1 on paper). */
+  --accent: #ff4a00;
+  --accent-text: #c23800;
   --accent-soft: #e8edf4;
   --danger: #a1382a;
   --ok: #3f7a52;
@@ -28,7 +32,8 @@
   --muted: #a29c91;
   --faint: #6f6a62;
   --rule: #2d2b27;
-  --accent: #a3b9dc;
+  --accent: #ff4a00;
+  --accent-text: #ff4a00;
   --accent-soft: #232a35;
   --danger: #e38b7c;
   --ok: #8dc29d;
@@ -44,6 +49,7 @@
   --color-faint: var(--faint);
   --color-rule: var(--rule);
   --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
   --color-accent-soft: var(--accent-soft);
   --color-danger: var(--danger);
   --color-ok: var(--ok);
@@ -133,7 +139,7 @@ body {
 .prose-rp li.task-list-item { padding-left: var(--indent); }
 
 .prose-rp a, .prose-rp .cm-md-link {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;

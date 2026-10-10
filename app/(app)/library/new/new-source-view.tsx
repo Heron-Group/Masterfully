@@ -402,7 +402,7 @@ function LinkDraftRow({
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="min-w-0 flex-1 truncate text-left text-[15px] text-accent underline decoration-1 underline-offset-2"
+            className="min-w-0 flex-1 truncate text-left text-[15px] text-accent-text underline decoration-1 underline-offset-2"
           >
             {url.replace(/^https?:\/\/(www\.)?/, "")}
           </button>

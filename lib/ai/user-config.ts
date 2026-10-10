@@ -50,6 +50,8 @@ export type AiCredentials = { provider: AiProvider; model: string; apiKey: strin
 function encryptionKey(): Buffer {
   const secret = process.env.SESSION_SECRET ?? "";
   if (secret.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters");
+  // "research-portal" is the app's original name. It is part of the key, so
+  // it stays: changing it would make every saved API key unreadable.
   return Buffer.from(hkdfSync("sha256", secret, "research-portal", "ai-api-keys v1", 32));
 }
 

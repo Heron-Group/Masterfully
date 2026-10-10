@@ -3,9 +3,9 @@ import type { MetadataRoute } from "next";
 /** Lets the app be added to a phone's home screen and open full-screen. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Research",
-    short_name: "Research",
-    description: "Research journal and reading list",
+    name: "Masterfully",
+    short_name: "Masterfully",
+    description: "Research journal, notes and reading list",
     start_url: "/journal",
     display: "standalone",
     background_color: "#fbfaf7",

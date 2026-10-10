@@ -22,8 +22,8 @@ export function serverConfig() {
       branch: env.CONTENT_GIT_BRANCH?.trim() || "main",
       sshKeyPath: env.GIT_SSH_KEY_PATH?.trim() || undefined,
       pushDelayMs: Math.max(1, Number(env.GIT_PUSH_DELAY_SECONDS) || 60) * 1000,
-      authorName: env.GIT_AUTHOR_NAME?.trim() || "Research Portal",
-      authorEmail: env.GIT_AUTHOR_EMAIL?.trim() || "research-portal@localhost",
+      authorName: env.GIT_AUTHOR_NAME?.trim() || "Masterfully",
+      authorEmail: env.GIT_AUTHOR_EMAIL?.trim() || "masterfully@localhost",
     },
     cacheDir: path.resolve(/*turbopackIgnore: true*/ env.CACHE_DIR?.trim() || ".cache"),
     /** Encrypted per-user secrets (AI API keys). Outside the content repo. */

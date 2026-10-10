@@ -56,7 +56,7 @@ export function NavList({
                   current ? "bg-accent-soft text-ink" : "text-muted hover:bg-accent-soft/60 hover:text-ink"
                 }`}
               >
-                <Icon size={18} strokeWidth={1.6} aria-hidden="true" />
+                <Icon size={18} strokeWidth={1.6} aria-hidden="true" className={current ? "text-accent" : undefined} />
                 <span className={current ? "inline" : "sr-only"}>{label}</span>
               </Link>
             </li>
@@ -78,7 +78,7 @@ export function NavList({
                 current ? "bg-accent-soft font-medium text-ink" : "text-muted hover:bg-accent-soft/60 hover:text-ink"
               }`}
             >
-              <Icon size={18} strokeWidth={1.6} aria-hidden="true" />
+              <Icon size={18} strokeWidth={1.6} aria-hidden="true" className={current ? "text-accent" : undefined} />
               {label}
             </Link>
           </li>

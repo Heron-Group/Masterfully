@@ -181,7 +181,7 @@ function AiBox({ label, stale, live, children }: { label: string; stale?: boolea
   return (
     <div className="rounded-lg bg-accent-soft/50 px-5 py-4" aria-live={live ? "polite" : undefined} aria-busy={live}>
       <p className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted">
-        <span className="rounded-full border border-accent/30 px-2 py-px text-accent">AI</span>
+        <span className="rounded-full border border-accent/30 px-2 py-px text-accent-text">AI</span>
         <span>{label}</span>
         {stale && <span className="text-warn">· Out of date: the group&apos;s sources changed after this was written</span>}
       </p>

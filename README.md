@@ -1,4 +1,4 @@
-# Research Portal
+# Masterfully
 
 A private web app for practice-led PhD research: a **research journal** that
 works like a messaging app, **notes** for longer writing with attachments, and a
@@ -166,7 +166,7 @@ How the app treats it:
 
    ```bash
    mkdir -p ~/.ssh && chmod 700 ~/.ssh
-   ssh-keygen -t ed25519 -N "" -C "research-portal" -f ~/.ssh/research_content_deploy
+   ssh-keygen -t ed25519 -N "" -C "masterfully" -f ~/.ssh/research_content_deploy
    cat ~/.ssh/research_content_deploy.pub
    ```
 
@@ -295,13 +295,13 @@ For Plesk's Docker extension or any container host. The image includes `git` and
 `ssh`; content and caches live in the `/data` volume.
 
 ```bash
-docker build -t research-portal .
+docker build -t masterfully .
 docker run -d --name research -p 3000:3000 \
   -v research-data:/data \
   -v ~/.ssh/research_content_deploy:/keys/deploy:ro \
   -e GIT_SSH_KEY_PATH=/keys/deploy \
   --env-file .env.production \
-  research-portal
+  masterfully
 ```
 
 `CONTENT_DIR` (`/data/content`), `CACHE_DIR` (`/data/cache`) and `SECRETS_DIR`

@@ -15,10 +15,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Research", template: "%s · Research" },
-  description: "Research journal and reading list",
+  title: { default: "Masterfully", template: "%s · Masterfully" },
+  description: "Research journal, notes and reading list",
   robots: { index: false, follow: false },
-  appleWebApp: { capable: true, title: "Research", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Masterfully", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

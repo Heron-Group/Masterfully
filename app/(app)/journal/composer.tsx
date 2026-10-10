@@ -132,7 +132,7 @@ export function Composer({ onPosted, ref }: { onPosted: (entry: EntryDto) => voi
                 disabled={!canPost}
                 aria-label="Post"
                 title="Post (⌘/Ctrl + Enter)"
-                className="flex size-8 items-center justify-center rounded-full bg-ink text-paper transition-opacity disabled:opacity-20"
+                className="flex size-8 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-25"
               >
                 <ArrowUp size={17} strokeWidth={2} aria-hidden="true" />
               </button>

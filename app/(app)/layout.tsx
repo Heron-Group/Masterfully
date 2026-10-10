@@ -12,7 +12,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
     <div className="app-shell min-h-dvh md:pl-56">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-rule bg-paper pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pt-[max(1rem,env(safe-area-inset-top))] md:flex">
         <Link href="/journal" className="mb-6 px-5 font-serif text-xl tracking-tight">
-          Research
+          Masterfully
         </Link>
         <nav aria-label="Main" className="px-3">
           <Suspense fallback={<NavList variant="sidebar" part="main" />}>

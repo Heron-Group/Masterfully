@@ -34,8 +34,8 @@ function page(opts: { title: string; body: string; base?: string; dark: boolean 
   // Pure black or white, so the page stands apart from the app's own
   // off-white or near-black background around the panel.
   const c = opts.dark
-    ? { paper: "#000000", ink: "#ebe6dd", muted: "#a29c91", rule: "#2d2b27", accent: "#a3b9dc", soft: "#232a35" }
-    : { paper: "#ffffff", ink: "#1f1e1b", muted: "#6c675e", rule: "#e7e3da", accent: "#36557f", soft: "#e8edf4" };
+    ? { paper: "#000000", ink: "#ebe6dd", muted: "#a29c91", rule: "#2d2b27", accent: "#ff4a00", soft: "#232a35" }
+    : { paper: "#ffffff", ink: "#1f1e1b", muted: "#6c675e", rule: "#e7e3da", accent: "#c23800", soft: "#e8edf4" };
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 ${opts.base ? `<base href="${escape(opts.base)}" target="_blank">` : ""}

@@ -464,7 +464,7 @@ function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: Read
             target="_blank"
             rel="noopener noreferrer"
             title={source.url}
-            className="min-w-[10rem] flex-1 truncate text-[15px] text-accent underline decoration-1 underline-offset-2"
+            className="min-w-[10rem] flex-1 truncate text-[15px] text-accent-text underline decoration-1 underline-offset-2"
           >
             {source.url.replace(/^https?:\/\/(www\.)?/, "")}
           </a>

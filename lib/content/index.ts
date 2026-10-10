@@ -73,7 +73,7 @@ export function getWorkspaceStore(account: Account): Promise<ContentStore> {
         git,
         repoDir: dir,
         prefix: `${USERS_DIR}/${account.id}`,
-        author: { name: account.name, email: account.email || `${account.id}@users.research-portal` },
+        author: { name: account.name, email: account.email || `${account.id}@users.masterfully` },
       });
       await ws.init();
       return ws;
