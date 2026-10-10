@@ -23,7 +23,8 @@ export default function SettingsPage() {
   );
 }
 
-const SIGN_IN_LABELS = { google: "Google", microsoft: "Microsoft", password: "Password", dev: "Development sign-in" } as const;
+// Password sign-in was removed; old accounts may still list it, so it is not shown.
+const SIGN_IN_LABELS: Record<string, string> = { google: "Google", microsoft: "Microsoft", dev: "Development sign-in" };
 
 async function SettingsContent() {
   const account = await requireSession();
@@ -31,7 +32,7 @@ async function SettingsContent() {
   const [settings, ai, accounts] = await Promise.all([store.getSettings(), getAiSettings(account.id), getAccounts()]);
   const owner = accounts.isOwner(account);
   const config = serverConfig();
-  const methods = [...new Set(account.identities.map((i) => SIGN_IN_LABELS[i.provider] ?? i.provider))];
+  const methods = [...new Set(account.identities.flatMap((i) => SIGN_IN_LABELS[i.provider] ?? []))];
   return (
     <div className="space-y-12">
       <section aria-labelledby="account-heading">
@@ -44,7 +45,7 @@ async function SettingsContent() {
           <dt className="text-muted">Email</dt>
           <dd className="break-all">{account.email || "—"}</dd>
           <dt className="text-muted">Signs in with</dt>
-          <dd>{methods.join(", ")}</dd>
+          <dd>{methods.join(", ") || "—"}</dd>
         </dl>
         <div className="-ml-2.5 mt-3">
           <SignOutButton />

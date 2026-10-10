@@ -33,20 +33,25 @@ Requires Node.js 20.9 or later (22 or 24 recommended) and `git`.
 
 ```bash
 npm install
-npm run hash-password        # prints APP_PASSWORD_HASH and a SESSION_SECRET
-cp .env.example .env.local   # paste the values in (see below)
+npm run session-secret       # prints a SESSION_SECRET
+cp .env.example .env.local   # paste it in (see below)
 npm run dev                  # http://localhost:3000
 ```
 
-In `.env.local`, write each `$` in the password hash as `\$` (Next.js expands
-`$NAME` in `.env` files; the script prints this form for you). For local work
-you only need `SESSION_SECRET`, `APP_PASSWORD_HASH`, `OWNER_EMAIL` and, optionally:
+For local work you need `SESSION_SECRET`, `OWNER_EMAIL` and either Google or
+Microsoft credentials (with `http://localhost:3000/api/auth/<google|microsoft>/callback`
+as a redirect URI) or the development sign-in:
 
 ```bash
 CONTENT_DIR=.dev-content   # the default in development; created on first run
 AI_FAKE=1                  # scripted AI summaries, no API key or cost (development only)
-AUTH_DEV_LOGIN=1           # sign in as any email address, to try several users (development only)
+AUTH_DEV_LOGIN=1           # development only, see below
 ```
+
+With `AUTH_DEV_LOGIN=1`, open
+`http://localhost:3000/api/auth/dev?email=you@example.com` to sign in as that
+address without Google or Microsoft (for trying several users, and for the
+browser tests). It isn't shown on the login page and never works in production.
 
 To fill the development content folder with sample journal entries, sources and
 a reading group:
@@ -68,8 +73,7 @@ All settings are environment variables. `.env.example` lists them with comments.
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | for Google sign-in | OAuth client (see [below](#sign-in-with-google-and-microsoft)). The button only shows when both are set. |
 | `AUTH_MICROSOFT_ID`, `AUTH_MICROSOFT_SECRET` | for Microsoft sign-in | App registration (see below). |
 | `AUTH_MICROSOFT_TENANT` | no | `common` (default: work, school and personal accounts), `consumers`, `organizations`, or one tenant ID. |
-| `OWNER_EMAIL` | recommended | Your email. Your account owns the content from the single-user version and can sign in with the password. |
-| `APP_PASSWORD_HASH` | no | Password sign-in for the owner only, as a fallback. Needs `OWNER_EMAIL`. Generate with `npm run hash-password`. |
+| `OWNER_EMAIL` | recommended | Your email. When you first sign in with Google or Microsoft using this (verified) address, the content from the single-user version moves into your workspace. |
 | `CONTENT_DIR` | yes (production) | **Absolute** path of the content folder, outside the web root, e.g. `/var/www/vhosts/example.com/research-content`. |
 | `CONTENT_GIT_REMOTE` | recommended | SSH URL of the private GitHub repo, e.g. `git@github.com:you/research-content.git`. Leave empty to keep content local only. |
 | `CONTENT_GIT_BRANCH` | no | Default `main`. |
@@ -221,8 +225,7 @@ Deploy this (code) repository into the subdomain's folder, e.g.
 | Application startup file | `server.js` |
 
 Under **Custom environment variables**, add the variables from
-[Configuration](#configuration). Paste `APP_PASSWORD_HASH` exactly as printed
-by `npm run hash-password` (no `\` escaping here). Use absolute paths for
+[Configuration](#configuration). Use absolute paths for
 `CONTENT_DIR`, `CACHE_DIR` and `GIT_SSH_KEY_PATH`, outside the subdomain's web
 root.
 
@@ -344,8 +347,8 @@ npm run test:e2e     # browser tests against the dev server
 
 Browser tests need the browsers once (`npx playwright install chromium webkit`),
 the sample content (`npm run seed-dev`), and `AI_FAKE=1`, `AUTH_DEV_LOGIN=1`,
-`APP_PASSWORD_HASH` and `OWNER_EMAIL` in `.env.local`. They sign in with the
-password as the owner, and as other users with the development sign-in. They
+and `OWNER_EMAIL` in `.env.local`. They sign in with the development sign-in,
+as the owner and as other users. They
 run on desktop Chrome, a mobile viewport, and WebKit (Safari's engine). They
 check, among other things:
 
@@ -368,7 +371,7 @@ the tests at it, e.g. `E2E_PORT=3200 E2E_CONTENT_DIR=/path/to/content npx playwr
 | Path | Role |
 | --- | --- |
 | [lib/content/](lib/content/) | **The only code that touches the content folder and Git**: tolerant parsing, safe section rewrites, the index, one commit per write with rollback, debounced push with rebase and conflict stop. Moving to another backend later (e.g. the GitHub API) is contained here. |
-| [lib/auth/](lib/auth/) | Google and Microsoft sign-in (OAuth with PKCE), the owner's password fallback with a rate limit (5 per 15 minutes per IP), and a signed 30-day HTTP-only cookie holding the user id. |
+| [lib/auth/](lib/auth/) | Google and Microsoft sign-in (OAuth with PKCE), the only way to sign in or sign up, and a signed 30-day HTTP-only cookie holding the user id. |
 | [lib/accounts.ts](lib/accounts.ts) | Accounts (`accounts/<id>.md`), linking sign-ins by verified email, and moving single-user content into the owner's workspace. |
 | [proxy.ts](proxy.ts) | Redirects signed-out requests. Pages, server actions and API routes also check the session themselves. Upload routes skip the proxy (it would cut large bodies off at 10 MB). |
 | [lib/ai/](lib/ai/) | Prompts, PDF handling, safe URL fetching, streaming summaries from Claude or OpenAI, and each user's encrypted key ([user-config.ts](lib/ai/user-config.ts)). |

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { LoginRateLimiter } from "@/lib/auth/rate-limit";
 import { createSessionToken, SESSION_MAX_AGE_SECONDS, verifySessionToken } from "@/lib/auth/session";
 
 const keys = { secret: "s".repeat(40) };
@@ -32,27 +31,5 @@ describe("session tokens", () => {
   it("is invalidated by changing the secret", async () => {
     const { token } = await createSessionToken(keys, "u1");
     expect(await verifySessionToken({ secret: "t".repeat(40) }, token)).toBeNull();
-  });
-});
-
-describe("login rate limit", () => {
-  it("blocks after 5 failures within 15 minutes, per IP", () => {
-    const limiter = new LoginRateLimiter(5, 15 * 60_000);
-    const t = 1_000_000;
-    for (let i = 0; i < 5; i++) {
-      expect(limiter.retryAfter("1.2.3.4", t)).toBe(0);
-      limiter.recordFailure("1.2.3.4", t);
-    }
-    expect(limiter.retryAfter("1.2.3.4", t)).toBe(15 * 60_000);
-    expect(limiter.retryAfter("5.6.7.8", t)).toBe(0);
-    expect(limiter.retryAfter("1.2.3.4", t + 15 * 60_000)).toBe(0);
-  });
-
-  it("resets after a successful login", () => {
-    const limiter = new LoginRateLimiter(2, 60_000);
-    limiter.recordFailure("ip", 0);
-    limiter.recordFailure("ip", 0);
-    limiter.reset("ip");
-    expect(limiter.retryAfter("ip", 1)).toBe(0);
   });
 });

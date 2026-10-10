@@ -7,11 +7,11 @@ test("signed-out visitors are sent to the login page", async ({ page, request })
   expect((await request.get("/api/sync")).status()).toBe(401);
 });
 
-test("a wrong password shows an error", async ({ page }) => {
+test("the login page offers only Google and Microsoft", async ({ page }) => {
   await page.goto("/login");
-  await page.getByPlaceholder("Password").fill("not-the-password");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.locator("#login-error")).toHaveText("That password isn't right.");
+  await expect(page.getByRole("link", { name: "Continue with Google" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Continue with Microsoft" })).toBeVisible();
+  await expect(page.locator("input")).toHaveCount(0);
 });
 
 test("signing in returns to the requested page, signing out ends the session", async ({ page }) => {

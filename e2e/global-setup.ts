@@ -1,17 +1,13 @@
-import { chromium, type FullConfig } from "@playwright/test";
-import { DEV_PASSWORD } from "./helpers";
+import { request, type FullConfig } from "@playwright/test";
+import { OWNER_EMAIL } from "./helpers";
 
 /**
- * Sign in with the dev password once before the specs run, so the owner's
- * account and workspace exist for specs that read or write its files.
+ * Sign in as the owner once before the specs run, so their account and
+ * workspace exist for specs that read or write its files.
  */
 export default async function globalSetup(config: FullConfig) {
-  const baseURL = config.projects[0].use.baseURL!;
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ baseURL });
-  await page.goto("/login");
-  await page.getByPlaceholder("Password").fill(DEV_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("**/journal", { timeout: 60_000 });
-  await browser.close();
+  const ctx = await request.newContext({ baseURL: config.projects[0].use.baseURL });
+  const res = await ctx.get(`/api/auth/dev?email=${encodeURIComponent(OWNER_EMAIL)}`, { maxRedirects: 0, timeout: 120_000 });
+  if (res.status() !== 307) throw new Error(`Development sign-in failed (${res.status()}). Is AUTH_DEV_LOGIN=1 set?`);
+  await ctx.dispose();
 }

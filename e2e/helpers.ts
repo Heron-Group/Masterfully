@@ -1,12 +1,22 @@
+import { readFileSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
 
-export const DEV_PASSWORD = process.env.E2E_PASSWORD ?? "devpassword-123";
+/** OWNER_EMAIL from the environment or .env.local: the account the specs use. */
+export const OWNER_EMAIL =
+  process.env.OWNER_EMAIL ??
+  readFileSync(".env.local", "utf8").match(/^OWNER_EMAIL=(.+)$/m)?.[1]?.trim() ??
+  "owner@example.com";
 
-export async function signIn(page: Page, next = "/journal") {
-  await page.goto(`/login?next=${encodeURIComponent(next)}`);
-  await page.getByPlaceholder("Password").fill(DEV_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+/**
+ * Sign in as a user through the development sign-in (AUTH_DEV_LOGIN=1),
+ * which stands in for Google/Microsoft. By default, as the owner.
+ */
+export async function signIn(page: Page, next = "/journal", email = OWNER_EMAIL) {
+  await page.goto(`/api/auth/dev?email=${encodeURIComponent(email)}&next=${encodeURIComponent(next)}`);
   await page.waitForURL(`**${next}`);
+  // This is a full page load (as after Google/Microsoft): wait until the
+  // page is hydrated, or early clicks and scrolls are lost.
+  await page.waitForLoadState("networkidle");
 }
 
 /** Text of a live (CodeMirror) editor, or "" when only the placeholder shows. */

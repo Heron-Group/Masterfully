@@ -101,8 +101,6 @@ test("AI provider and API key in Settings", async ({ page }) => {
 test("login page explains sign-in problems", async ({ page, request }) => {
   await page.goto("/login?error=cancelled");
   await expect(page.getByRole("alert")).toHaveText("Sign-in was cancelled.");
-  // Providers without credentials on the server aren't offered.
-  await expect(page.getByRole("link", { name: /Continue with/ })).toHaveCount(0);
   const res = await request.get("/api/auth/google", { maxRedirects: 0 });
   expect(res.status()).toBe(307);
   expect(res.headers().location).toContain("/login?error=unavailable");

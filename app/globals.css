@@ -172,7 +172,12 @@ body {
 .prose-rp th, .prose-rp td { border: 1px solid var(--rule); padding: 0.35em 0.6em; text-align: left; }
 .prose-rp th { font-weight: 600; }
 
-/* Live editor (CodeMirror): no box, the page is the editor. */
+/* Live editor (CodeMirror): no box, the page is the editor. One line tall
+   before CodeMirror mounts, so nothing shifts when it does (in the base layer
+   so a min-h-* utility on an editor still wins). */
+@layer base {
+  .live-editor { min-height: 1.65em; }
+}
 .live-editor .cm-editor { background: transparent; }
 .live-editor .cm-editor.cm-focused { outline: none; }
 .live-editor .cm-scroller { font-family: inherit; line-height: inherit; overflow: visible; }

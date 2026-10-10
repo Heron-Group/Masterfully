@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "hash-password": "node scripts/hash-password.mjs",
+    "session-secret": "node scripts/session-secret.mjs",
     "test:e2e": "playwright test",
     "seed-dev": "node scripts/seed-dev-content.mjs 160 --library",
     "postinstall": "node scripts/copy-pdf-worker.mjs"
@@ -29,7 +29,6 @@
     "@lezer/markdown": "^1.8.0",
     "@mozilla/readability": "^0.6.0",
     "arctic": "^3.7.0",
-    "bcryptjs": "^3.0.3",
     "busboy": "^1.6.0",
     "gray-matter": "^4.0.3",
     "heic-convert": "^2.1.0",

@@ -3,9 +3,9 @@
 // entries spread over several weeks, then commit them in the content repo.
 // Usage: node scripts/seed-dev-content.mjs [count] [--library] [--user=email]
 //   --library also adds a few sample sources and a reading group.
-//   --user picks whose workspace to fill; by default the account that signs
-//   in with the password (the owner), or the repository root before anyone
-//   has signed in (moved into the owner's workspace on first sign-in).
+//   --user picks whose workspace to fill; by default OWNER_EMAIL's (read
+//   from .env.local), or the repository root before the owner has signed in
+//   (moved into their workspace on first sign-in).
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -15,17 +15,19 @@ if (!existsSync(path.join(repo, ".git"))) {
   console.error(`${repo} is not an initialised content repo. Start the app once first.`);
   process.exit(1);
 }
-const user = process.argv.find((a) => a.startsWith("--user="))?.slice(7).toLowerCase();
+const envOwner = existsSync(".env.local")
+  ? readFileSync(".env.local", "utf8").match(/^OWNER_EMAIL=(.+)$/m)?.[1]?.trim()
+  : undefined;
+const userArg = process.argv.find((a) => a.startsWith("--user="))?.slice(7).toLowerCase();
+const user = userArg ?? (process.env.OWNER_EMAIL || envOwner)?.toLowerCase();
 const accountsDir = path.join(repo, "accounts");
 const accounts = existsSync(accountsDir)
   ? readdirSync(accountsDir)
       .filter((f) => f.endsWith(".md"))
       .map((f) => ({ id: f.slice(0, -3), text: readFileSync(path.join(accountsDir, f), "utf8") }))
   : [];
-const target = user
-  ? accounts.find((a) => a.text.toLowerCase().includes(`email: ${user}`))
-  : accounts.find((a) => a.text.includes("subject: owner"));
-if (user && !target) {
+const target = user ? accounts.find((a) => a.text.toLowerCase().includes(`email: ${user}`)) : undefined;
+if (userArg && !target) {
   console.error(`No account with the email ${user}. Sign in as them once first.`);
   process.exit(1);
 }

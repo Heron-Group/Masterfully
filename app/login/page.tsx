@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { passwordLoginEnabled } from "@/lib/auth";
 import { enabledProviders } from "@/lib/auth/oauth";
-import { devLoginEnabled } from "@/lib/auth/redirects";
 import { SignInOptions } from "./login-form";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -22,8 +20,8 @@ export default function LoginPage() {
   );
 }
 
-/** Read at request time, so the options follow the server's environment rather than the build's. */
+/** Read at request time, so it follows the server's environment rather than the build's. */
 async function Options() {
   await connection();
-  return <SignInOptions providers={enabledProviders()} password={passwordLoginEnabled()} dev={devLoginEnabled()} />;
+  return <SignInOptions configured={enabledProviders()} />;
 }

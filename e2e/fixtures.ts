@@ -2,19 +2,22 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { OWNER_EMAIL } from "./helpers";
 
 /** The content repository. */
 export const REPO_DIR = path.resolve(process.env.E2E_CONTENT_DIR ?? ".dev-content");
 
-/** Account id of whoever signs in with the dev password (the owner; see global-setup). */
-export function ownerId(): string {
+/** Account id for an email address (the owner by default; see global-setup). */
+export function ownerId(email = OWNER_EMAIL): string {
   const dir = path.join(REPO_DIR, "accounts");
-  const file = readdirSync(dir).find((f) => readFileSync(path.join(dir, f), "utf8").includes("subject: owner"));
-  if (!file) throw new Error("No owner account yet: sign in with the password first.");
+  const file = readdirSync(dir).find((f) =>
+    readFileSync(path.join(dir, f), "utf8").toLowerCase().includes(`email: ${email.toLowerCase()}`),
+  );
+  if (!file) throw new Error(`No account for ${email} yet: sign in first.`);
   return file.slice(0, -3);
 }
 
-/** The owner's workspace folder, where the specs signed in with the password read and write. */
+/** The owner's workspace folder, where the specs read and write. */
 export const workspace = (rel = "") => path.join(REPO_DIR, "users", ownerId(), rel);
 
 /** A real one-page PDF, padded with an unused stream to roughly `bytes` long. */
