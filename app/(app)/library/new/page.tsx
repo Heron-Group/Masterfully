@@ -4,16 +4,15 @@ import { BackLink } from "@/components/back-link";
 import { ui } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { getContentStore } from "@/lib/content";
-import { NewSourceForm } from "./new-source-form";
+import { NewSourceView } from "./new-source-view";
 
 export const metadata: Metadata = { title: "Add source" };
 
+/** A blank source page; the source is created once it has a title. */
 export default function NewSourcePage(props: PageProps<"/library/new">) {
   return (
     <main className={ui.page}>
       <BackLink to="library" />
-      <h1 className="sr-only">Add a source</h1>
-      <div className="mt-6" />
       <Suspense fallback={<p className="text-sm text-faint">Loading…</p>}>
         <FormLoader searchParams={props.searchParams} />
       </Suspense>
@@ -27,7 +26,7 @@ async function FormLoader({ searchParams }: { searchParams: PageProps<"/library/
   const groups = await store.listGroups();
   const preselect = (await searchParams).group;
   return (
-    <NewSourceForm
+    <NewSourceView
       groups={groups.map((g) => ({ id: g.id, title: g.title }))}
       preselectedGroup={typeof preselect === "string" ? preselect : undefined}
     />

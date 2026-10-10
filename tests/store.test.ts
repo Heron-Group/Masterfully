@@ -242,6 +242,12 @@ describe("sources and groups", () => {
     expect(again.id).toBe("brody-2025-graphic-language-co-2");
   });
 
+  it("never uses ids that clash with page addresses", async () => {
+    const store = await makeStore();
+    expect((await store.createGroup({ title: "New" })).id).toBe("new-2");
+    expect((await store.createSource({ title: "New" })).id).toBe("new-2");
+  });
+
   it("adds a new source to groups and stores a PDF in one commit", async () => {
     const store = await makeStore();
     await store.createGroup({ title: "Methods" });

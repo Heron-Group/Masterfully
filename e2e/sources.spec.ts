@@ -39,15 +39,24 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   test.setTimeout(120_000);
   await signIn(page, "/library");
   await page.getByRole("link", { name: "Add source" }).click();
-  await page.getByLabel("Title", { exact: true }).fill(TITLE);
-  await page.getByLabel(/Authors/).fill("Brody, Ann\nMüller, Jo");
-  await page.getByLabel("Year", { exact: true }).fill("2025");
+  // The blank source page: fill in the details first, then the title creates it.
+  await expect(page.getByText("Give the source a title to save it")).toBeVisible();
+  const authors = page.getByLabel("Authors", { exact: true });
+  await authors.fill("Brody, Ann; Müller, Jo");
+  await authors.press("Enter");
+  const year = page.getByLabel("Year", { exact: true });
+  await year.fill("2025");
+  await year.press("Enter");
   await page.getByLabel("Type", { exact: true }).selectOption("article");
+  await page.getByRole("button", { name: "Add a link" }).click();
   await page.getByLabel("Link", { exact: true }).fill("https://example.org/paper");
+  await page.getByLabel("Link", { exact: true }).press("Enter");
   await page.locator('input[type="file"]').setInputFiles(pdfFile(40 * 1024 * 1024, `Forty megabytes ${stamp}`));
   await setEditorText(page, page.getByRole("textbox", { name: "My notes" }), "First **impressions**.");
-  await page.locator("label", { hasText: `E2E Group ${stamp}` }).click();
-  await page.getByRole("button", { name: "Add source" }).click();
+  await page.getByLabel("Add to a group").selectOption(GROUP);
+  const title = page.getByLabel("Title", { exact: true });
+  await title.fill(TITLE);
+  await title.press("Enter");
 
   await page.waitForURL(/\/library\/brody-2025-e2e-graphic/, { timeout: 90_000 });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(TITLE);

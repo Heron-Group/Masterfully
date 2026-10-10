@@ -69,10 +69,14 @@ body {
   background: var(--accent-soft);
 }
 
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 2px;
+/* Keyboard focus outline. In the base layer so components that show focus
+   their own way (inline fields use a soft background) can override it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
 }
 
 /* --- Markdown: rendered pages and the live editor ---------------------------

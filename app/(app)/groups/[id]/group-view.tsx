@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { InlineTitle, useInlineSave } from "@/components/inline-fields";
 import { LiveEditor } from "@/components/live-editor/live-editor";
@@ -8,6 +9,7 @@ import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
 import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
 import type { GroupDto } from "@/lib/dto";
+import { formatShortDate, formatTime } from "@/lib/time";
 import { deleteGroup, renameGroup, saveGroupOverview, type ActionResult } from "../actions";
 import { GroupSources, type LibraryItem } from "./group-sources";
 import { GroupSummaryPanel } from "./group-summary";
@@ -30,18 +32,19 @@ export function GroupView({ group, library }: { group: GroupDto; library: Librar
   }
   return (
     <article className="mt-4 space-y-12">
-      <Title group={group} />
+      <Header group={group} />
       <Overview group={group} />
       <GroupSummaryPanel group={group} />
       <GroupSources group={group} library={library} />
-      <DeleteGroup group={group} />
     </article>
   );
 }
 
-/** The group's title, renamed in place. The file name never changes. */
-function Title({ group }: { group: GroupDto }) {
+/** Title (renamed in place; the file name never changes), then one quiet line of details. */
+function Header({ group }: { group: GroupDto }) {
   const { save, label, isError } = useInlineSave();
+  const count = group.sources.length;
+  const dot = <span aria-hidden="true" className="px-0.5 text-faint">·</span>;
   return (
     <header>
       <h1 className="sr-only">{group.title}</h1>
@@ -56,9 +59,25 @@ function Title({ group }: { group: GroupDto }) {
           })
         }
       />
-      <p role={isError ? "alert" : "status"} className={`mt-1 h-4 text-xs ${isError ? "text-danger" : "text-faint"}`}>
-        {label}
-      </p>
+      <div className="mt-1 flex flex-wrap items-center gap-y-1 text-[13px] text-muted">
+        <span className="pr-1.5">
+          {count} source{count === 1 ? "" : "s"}
+        </span>
+        {dot}
+        <span className="px-1.5 text-faint" title={`${formatShortDate(group.updated)} ${formatTime(group.updated)}`}>
+          Updated {formatShortDate(group.updated)}
+        </span>
+        {dot}
+        <span className="px-1.5 text-faint">Created {formatShortDate(group.created)}</span>
+        <span className="ml-auto">
+          <DeleteGroupControl group={group} />
+        </span>
+      </div>
+      {label && (
+        <p role={isError ? "alert" : "status"} className={`mt-1 text-xs ${isError ? "text-danger" : "text-faint"}`}>
+          {label}
+        </p>
+      )}
     </header>
   );
 }
@@ -92,18 +111,32 @@ function Overview({ group }: { group: GroupDto }) {
   );
 }
 
-function DeleteGroup({ group }: { group: GroupDto }) {
+/** Bin icon in the details line; asks before deleting. Sources are kept. */
+function DeleteGroupControl({ group }: { group: GroupDto }) {
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<ActionResult | null>(null);
   const [pending, start] = useTransition();
   return (
-    <section className="border-t border-rule pt-6">
-      {confirming ? (
-        <div role="alertdialog" aria-label="Delete group" className="rounded-md bg-danger/5 p-4 text-sm">
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setConfirming((c) => !c)}
+        aria-label="Delete group…"
+        aria-expanded={confirming}
+        title="Delete group"
+        className="rounded-md p-1.5 text-faint transition-colors hover:bg-danger/10 hover:text-danger"
+      >
+        <Trash2 size={15} strokeWidth={1.7} aria-hidden="true" />
+      </button>
+      {confirming && (
+        <div role="alertdialog" aria-label="Delete group" className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg bg-surface p-4 text-sm text-ink shadow-lg shadow-black/10 ring-1 ring-rule">
           <p>
             Delete the group <strong>{group.title}</strong>? Its {group.sources.length} source
-            {group.sources.length === 1 ? "" : "s"} stay in your <Link href="/library" className="underline">library</Link>; only
-            the grouping, your overview and group notes are removed.
+            {group.sources.length === 1 ? "" : "s"} stay in your{" "}
+            <Link href="/library" className="underline">
+              library
+            </Link>
+            ; only the grouping, your overview and group notes are removed.
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -125,11 +158,7 @@ function DeleteGroup({ group }: { group: GroupDto }) {
           </div>
           {result && !result.ok && <p role="alert" className="mt-2 text-danger">{result.error}</p>}
         </div>
-      ) : (
-        <button type="button" onClick={() => setConfirming(true)} className="text-sm text-muted hover:text-danger">
-          Delete group…
-        </button>
       )}
-    </section>
+    </div>
   );
 }

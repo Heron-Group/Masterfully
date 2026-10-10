@@ -21,13 +21,13 @@ async function run(fn: () => Promise<unknown>, opts: { refresh?: boolean } = {})
   }
 }
 
-export async function createGroup(title: string): Promise<ActionResult> {
+/** Create a group (from the blank new-group page); returns its id. */
+export async function createGroup(title: string, overview = ""): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   let id = "";
   const result = await run(async () => {
-    id = (await (await getContentStore()).createGroup({ title })).id;
+    id = (await (await getContentStore()).createGroup({ title, overview })).id;
   }, { refresh: false });
-  if (result.ok) redirect(`/groups/${id}`);
-  return result;
+  return result.ok ? { ok: true, id } : result;
 }
 
 export async function renameGroup(id: string, title: string): Promise<ActionResult> {

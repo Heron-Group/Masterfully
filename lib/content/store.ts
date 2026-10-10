@@ -53,6 +53,9 @@ export const DIRS = {
 } as const;
 export const SETTINGS_FILE = "settings.md";
 
+/** Ids that would clash with page addresses (/library/new, /groups/new). */
+const RESERVED_IDS = new Set(["new"]);
+
 const CONTENT_GITIGNORE = `.DS_Store\nThumbs.db\n.obsidian/workspace*\n.trash/\n`;
 
 export type NewSource = {
@@ -551,7 +554,7 @@ export class ContentStore {
         const authors = (input.authors ?? []).map((a) => a.trim()).filter(Boolean);
         const id = uniqueId(
           sourceSlug({ title, authors, year: input.year }),
-          (c) => this.sources.has(c) || tx.has(`${DIRS.sources}/${c}.md`),
+          (c) => this.sources.has(c) || RESERVED_IDS.has(c) || tx.has(`${DIRS.sources}/${c}.md`),
         );
         const rel = `${DIRS.sources}/${id}.md`;
         let pdf: string | undefined;
@@ -703,7 +706,7 @@ export class ContentStore {
     return this.write(
       (g) => `group: create ${g.id}`,
       async (tx) => {
-        const id = uniqueId(slugify(title) || "group", (c) => this.groups.has(c));
+        const id = uniqueId(slugify(title) || "group", (c) => this.groups.has(c) || RESERVED_IDS.has(c));
         const now = this.stamp();
         const overview = (input.overview ?? "").trim();
         const group: Group = {

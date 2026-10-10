@@ -27,7 +27,7 @@ test.afterAll(async ({ browser }) => {
     if (!href) continue;
     await page.goto(href);
     await page.getByRole("button", { name: "Delete group…" }).click();
-    await page.getByRole("button", { name: "Delete group" }).click();
+    await page.getByRole("button", { name: "Delete group", exact: true }).click();
     await page.waitForURL("**/groups");
   }
   await page.close();
@@ -35,8 +35,11 @@ test.afterAll(async ({ browser }) => {
 
 test("create a group, add sources from the library, see it in the index", async ({ page }) => {
   await signIn(page, "/groups");
-  await page.getByLabel("New group title").fill(TITLE);
-  await page.getByRole("button", { name: "Create group" }).click();
+  await page.getByRole("link", { name: "New group" }).click();
+  // The blank group page: the title creates it.
+  await expect(page.getByText("Give the group a title to save it")).toBeVisible();
+  await page.getByLabel("Group title").fill(TITLE);
+  await page.getByLabel("Group title").press("Enter");
   await page.waitForURL(/\/groups\/e2e-methods-/);
   groupUrl = page.url();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(TITLE);
@@ -133,7 +136,7 @@ test("remove a source from the group; it stays in the library", async ({ page })
 test("deleting a group keeps its sources", async ({ page }) => {
   await openGroup(page);
   await page.getByRole("button", { name: "Delete group…" }).click();
-  await page.getByRole("button", { name: "Delete group" }).click();
+  await page.getByRole("button", { name: "Delete group", exact: true }).click();
   await page.waitForURL("**/groups");
   await expect(page.getByRole("link", { name: new RegExp(TITLE) })).toHaveCount(0);
   const files = git("show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean);
