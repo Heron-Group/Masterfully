@@ -109,7 +109,7 @@ function DeleteControl({ note }: { note: NoteDto }) {
         >
           <p>
             Delete <strong>{note.title}</strong>
-            {files ? ` and its ${files} attachment${files === 1 ? "" : "s"}` : ""}? Its history stays in Git.
+            {files ? ` and its ${files} attachment${files === 1 ? "" : "s"}` : ""}? This can&apos;t be undone.
           </p>
           <div className="mt-3 flex gap-2">
             <button

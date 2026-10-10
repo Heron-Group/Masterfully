@@ -234,7 +234,7 @@ function DeleteControl({ source }: { source: SourceDto }) {
           <p>
             Delete <strong>{source.title}</strong>
             {source.pdf ? " and its PDF" : ""}? It will also be removed from{" "}
-            {source.groups.length ? `${source.groups.length} group${source.groups.length === 1 ? "" : "s"}` : "any groups"}. Its history stays in Git.
+            {source.groups.length ? `${source.groups.length} group${source.groups.length === 1 ? "" : "s"}` : "any groups"}. This can&apos;t be undone.
           </p>
           <div className="mt-3 flex gap-2">
             <button

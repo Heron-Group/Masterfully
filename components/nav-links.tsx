@@ -14,18 +14,36 @@ export const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
 
 
 type Variant = "sidebar" | "bar";
+/** In the sidebar, Settings sits apart at the bottom; the phone bar shows everything. */
+type Part = "all" | "main" | "footer";
 
-export function NavLinks({ variant }: { variant: Variant }) {
+function itemsFor(part: Part) {
+  if (part === "all") return NAV_ITEMS;
+  return NAV_ITEMS.filter((i) => (i.href === "/settings") === (part === "footer"));
+}
+
+export function NavLinks({ variant, part = "all" }: { variant: Variant; part?: Part }) {
   const pathname = usePathname();
-  return <NavList variant={variant} active={(href) => pathname === href || pathname.startsWith(`${href}/`)} />;
+  return (
+    <NavList variant={variant} part={part} active={(href) => pathname === href || pathname.startsWith(`${href}/`)} />
+  );
 }
 
 /** Also used as the Suspense fallback, with nothing marked active. */
-export function NavList({ variant, active = () => false }: { variant: Variant; active?: (href: string) => boolean }) {
+export function NavList({
+  variant,
+  part = "all",
+  active = () => false,
+}: {
+  variant: Variant;
+  part?: Part;
+  active?: (href: string) => boolean;
+}) {
+  const items = itemsFor(part);
   if (variant === "bar") {
     return (
       <ul className="flex items-center gap-1">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon: Icon }) => {
           const current = active(href);
           return (
             <li key={href}>
@@ -49,7 +67,7 @@ export function NavList({ variant, active = () => false }: { variant: Variant; a
   }
   return (
     <ul className="space-y-0.5">
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon }) => {
         const current = active(href);
         return (
           <li key={href}>

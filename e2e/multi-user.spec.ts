@@ -107,3 +107,21 @@ test("login page explains sign-in problems", async ({ page, request }) => {
   const cb = await request.get("/api/auth/google/callback?code=x&state=y", { maxRedirects: 0 });
   expect(cb.headers().location).toContain("/login?error=expired");
 });
+
+test("Settings sits at the bottom of the sidebar; data downloads as a zip", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "the sidebar shows on wide screens");
+  const email = `export-${stamp}@example.com`;
+  await signInAs(page, email, "/settings");
+  const main = page.getByRole("navigation", { name: "Main" }).filter({ visible: true });
+  await expect(main.getByRole("link", { name: "Settings" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Account" }).getByRole("link", { name: "Settings" })).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("link", { name: "Download your data" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^research-\d{4}-\d{2}-\d{2}\.zip$/);
+  const zip = readFileSync((await download.path())!);
+  expect(zip.subarray(0, 2).toString()).toBe("PK");
+  expect(zip.includes(Buffer.from("settings.md"))).toBe(true);
+});

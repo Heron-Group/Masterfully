@@ -14,6 +14,9 @@ export const ui = {
   /** Quiet action with an icon: Add to group, Generate summary, Add from library, New source. */
   btnAction:
     "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-accent-soft/70 hover:text-ink disabled:opacity-50",
+  /** A quiet button with a soft background and an icon: Sign out, Download your data. */
+  btnSoft:
+    "inline-flex items-center gap-1.5 rounded-md bg-accent-soft/70 px-3 py-1.5 text-sm text-ink transition-colors hover:bg-accent-soft disabled:opacity-50",
   btnGhost: "rounded px-2 py-1 text-sm text-muted transition-colors hover:text-ink disabled:opacity-50",
   btnDanger:
     "inline-flex items-center justify-center rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-paper disabled:opacity-60",

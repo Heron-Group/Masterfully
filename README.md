@@ -139,6 +139,10 @@ the owner's workspace (`OWNER_EMAIL`) the first time they sign in, in one commit
 Commits are authored as the user who made the change. AI keys are **not** in
 the repository; they are encrypted in `SECRETS_DIR`.
 
+Users can download everything in their workspace as a zip (Markdown files and
+attachments) from **Settings → Your data**. The app's interface doesn't
+mention Git; backups show only as the status at the bottom of the sidebar.
+
 How the app treats it:
 
 - **One commit per change**, with a readable message such as

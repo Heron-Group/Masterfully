@@ -1,11 +1,10 @@
+import { Download } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ui } from "@/components/ui";
 import { getAiSettings } from "@/lib/ai/user-config";
 import { requireSession } from "@/lib/auth";
-import { getAccounts, getWorkspaceStore } from "@/lib/content";
-import { serverConfig } from "@/lib/config";
 import { AiSettings } from "./ai-settings";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -26,10 +25,7 @@ const SIGN_IN_LABELS: Record<string, string> = { google: "Google", microsoft: "M
 
 async function SettingsContent() {
   const account = await requireSession();
-  const store = await getWorkspaceStore(account);
-  const [ai, accounts] = await Promise.all([getAiSettings(account.id), getAccounts()]);
-  const owner = accounts.isOwner(account);
-  const config = serverConfig();
+  const ai = await getAiSettings(account.id);
   const methods = [...new Set(account.identities.flatMap((i) => SIGN_IN_LABELS[i.provider] ?? []))];
   return (
     <div className="space-y-12">
@@ -45,7 +41,7 @@ async function SettingsContent() {
           <dt className="text-muted">Signs in with</dt>
           <dd>{methods.join(", ") || "—"}</dd>
         </dl>
-        <div className="-ml-2.5 mt-3">
+        <div className="mt-4">
           <SignOutButton />
         </div>
       </section>
@@ -61,26 +57,18 @@ async function SettingsContent() {
         <AiSettings initial={ai} />
       </section>
 
-      <section aria-labelledby="storage-heading">
-        <h2 id="storage-heading" className={`${ui.h2} mb-3`}>
-          Storage and backup
+      <section aria-labelledby="data-heading">
+        <h2 id="data-heading" className={`${ui.h2} mb-2`}>
+          Your data
         </h2>
-        <p className="max-w-prose text-sm text-muted">
-          Your journal, notes and reading list are saved as Markdown files in your own private folder and backed up with Git
-          {config.git.remote ? " to a private GitHub repository" : ""}. Other users can&apos;t see them.
+        <p className="mb-4 max-w-prose text-sm text-muted">
+          Download everything you&apos;ve created (journal entries, notes, sources, reading groups and their attached
+          files) as a zip of Markdown files you can open in any text editor. Your API key isn&apos;t included.
         </p>
-        {owner && (
-          <dl className="mt-3 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
-            <dt className="text-muted">Your folder</dt>
-            <dd className="break-all font-mono text-xs leading-5">{store.dir}</dd>
-            <dt className="text-muted">GitHub remote</dt>
-            <dd className="break-all font-mono text-xs leading-5">{config.git.remote ?? "None (local only)"}</dd>
-            <dt className="text-muted">Push delay</dt>
-            <dd>{Math.round(config.git.pushDelayMs / 1000)} seconds after the last change</dd>
-            <dt className="text-muted">Accounts</dt>
-            <dd>{(await accounts.list()).length}</dd>
-          </dl>
-        )}
+        <a href="/api/export" download className={ui.btnSoft}>
+          <Download size={15} strokeWidth={1.8} aria-hidden="true" />
+          Download your data
+        </a>
       </section>
     </div>
   );

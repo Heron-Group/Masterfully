@@ -95,7 +95,7 @@ export function Composer({ onPosted, ref }: { onPosted: (entry: EntryDto) => voi
           </p>
         )}
         {/* A rounded input box, like Claude's: writing on top, controls below. */}
-        <div className="rounded-2xl border border-rule bg-surface px-4 pb-2 pt-3 shadow-[0_1px_6px_rgba(0,0,0,0.04)] transition-colors focus-within:border-faint">
+        <div className="rounded-2xl border border-rule bg-surface px-4 pb-[15px] pt-3 shadow-[0_1px_6px_rgba(0,0,0,0.04)] transition-colors focus-within:border-faint">
           {files.length > 0 && (
             <div className="mb-2">
               <PendingFiles

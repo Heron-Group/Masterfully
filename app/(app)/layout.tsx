@@ -17,11 +17,16 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
           Research
         </Link>
         <nav aria-label="Main" className="px-3">
-          <Suspense fallback={<NavList variant="sidebar" />}>
-            <NavLinks variant="sidebar" />
+          <Suspense fallback={<NavList variant="sidebar" part="main" />}>
+            <NavLinks variant="sidebar" part="main" />
           </Suspense>
         </nav>
-        <div className="mt-auto flex items-center justify-between px-3">
+        <nav aria-label="Account" className="mt-auto px-3 pb-2">
+          <Suspense fallback={<NavList variant="sidebar" part="footer" />}>
+            <NavLinks variant="sidebar" part="footer" />
+          </Suspense>
+        </nav>
+        <div className="flex items-center justify-between px-3">
           <SyncStatus placement="up" />
           <ThemeToggle />
         </div>

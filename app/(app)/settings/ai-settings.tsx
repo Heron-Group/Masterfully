@@ -68,7 +68,7 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
   }
 
   return (
-    <div className="max-w-xl space-y-5">
+    <div className="space-y-5">
       <div role="radiogroup" aria-label="AI provider" className="inline-flex rounded-lg bg-accent-soft/60 p-0.5">
         {PROVIDERS.map((p) => (
           <button
@@ -86,9 +86,11 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-[6rem_1fr] items-start gap-x-4 gap-y-4 text-sm">
-        <span className="pt-1.5 text-muted">API key</span>
+      <div className="space-y-5 text-sm">
         <div>
+          <label htmlFor="ai-key" className={ui.label}>
+            API key
+          </label>
           {key && !replacing ? (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="inline-flex items-center gap-1.5 py-1">
@@ -141,6 +143,7 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
                 value={keyInput}
                 onChange={(e) => setKeyInput(e.target.value)}
                 placeholder={provider.keyPlaceholder}
+                id="ai-key"
                 aria-label={`${provider.label} API key`}
                 autoComplete="off"
                 spellCheck={false}
@@ -168,10 +171,10 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
           )}
         </div>
 
-        <label htmlFor="ai-model" className="pt-1.5 text-muted">
-          Model
-        </label>
         <div>
+          <label htmlFor="ai-model" className={ui.label}>
+            Model
+          </label>
           <input
             id="ai-model"
             value={model}
@@ -206,9 +209,7 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
           <span className="text-muted">
             Ready. Summaries use {provider.label} ({settings.models[shown]}), billed to your key.
           </span>
-        ) : (
-          <span className="text-muted">Add your {provider.label} API key to turn on AI summaries.</span>
-        )}
+        ) : null}
       </p>
     </div>
   );
