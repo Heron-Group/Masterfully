@@ -187,3 +187,95 @@ export function useInlineSave() {
     state.status === "saving" ? "Saving…" : state.status === "saved" ? "Saved" : state.status === "error" ? state.error : "";
   return { save, label, isError: state.status === "error" };
 }
+
+/**
+ * Inline text that sizes itself to its content, for values that sit in a
+ * line of text (e.g. "Brody, Ann · 2025 · Article"). Saves on blur or Enter.
+ */
+export function InlineAutoText({
+  value,
+  onSave,
+  placeholder,
+  ariaLabel,
+  title,
+  inputMode,
+  className = "",
+}: {
+  value: string;
+  onSave: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  title?: string;
+  inputMode?: "numeric" | "text";
+  className?: string;
+}) {
+  const [draft, setDraft] = useDraft(value);
+  return (
+    <span className={`inline-grid max-w-full align-middle ${className}`} title={title ?? ariaLabel}>
+      {/* Invisible copy of the text sets the width; the input sits on top. */}
+      <span aria-hidden="true" className="invisible col-start-1 row-start-1 overflow-hidden whitespace-pre px-1.5 py-0.5">
+        {draft || placeholder}
+      </span>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => draft.trim() !== value.trim() && onSave(draft.trim())}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") {
+            setDraft(value);
+            e.currentTarget.blur();
+          }
+        }}
+        inputMode={inputMode}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        autoComplete="off"
+        // A small size stops the input's default ~20-character width; the
+        // hidden copy of the text above sets the real width.
+        size={1}
+        className="col-start-1 row-start-1 w-full min-w-0 rounded-sm bg-transparent px-1.5 py-0.5 text-inherit placeholder:text-faint transition-colors hover:bg-accent-soft/70 focus:bg-accent-soft focus:text-ink focus:outline-none focus-visible:outline-none"
+      />
+    </span>
+  );
+}
+
+/**
+ * A select that is exactly as wide as its current label: the label shows as
+ * text, with the (invisible) native select laid over it to open the list.
+ */
+export function InlineSelectText<T extends string>({
+  value,
+  options,
+  onSave,
+  ariaLabel,
+  className = "",
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onSave: (value: T) => void;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const label = options.find((o) => o.value === value)?.label ?? value;
+  return (
+    <span
+      className={`relative inline-block rounded-sm px-1.5 py-0.5 transition-colors hover:bg-accent-soft/70 focus-within:bg-accent-soft focus-within:text-ink ${className}`}
+      title={ariaLabel}
+    >
+      {label}
+      <select
+        value={value}
+        onChange={(e) => onSave(e.target.value as T)}
+        aria-label={ariaLabel}
+        className="absolute inset-0 w-full cursor-pointer appearance-none opacity-0"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}

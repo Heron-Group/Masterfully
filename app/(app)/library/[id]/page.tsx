@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { BackLink } from "@/components/back-link";
 import { ui } from "@/components/ui";
 import { sourceToDto } from "@/lib/api";
 import { requireSession } from "@/lib/auth";
@@ -16,9 +16,7 @@ export async function generateMetadata(props: PageProps<"/library/[id]">): Promi
 export default function SourcePage(props: PageProps<"/library/[id]">) {
   return (
     <main className={ui.page}>
-      <Link href="/library" className="text-sm text-muted hover:text-ink">
-        ← Library
-      </Link>
+      <BackLink to="library" />
       <Suspense fallback={<p className="mt-6 text-sm text-faint">Loading…</p>}>
         <SourceLoader params={props.params} searchParams={props.searchParams} />
       </Suspense>

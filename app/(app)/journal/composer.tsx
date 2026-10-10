@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowUp } from "lucide-react";
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { LiveEditor, type LiveEditorHandle } from "@/components/live-editor/live-editor";
 import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
@@ -86,28 +87,29 @@ export function Composer({ onPosted, ref }: { onPosted: (entry: EntryDto) => voi
   const canPost = !posting && (!!text.trim() || files.length > 0);
 
   return (
-    <div role="region" aria-label="New entry" className="border-t border-rule bg-paper pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto max-w-3xl px-4 pb-3 pt-3">
+    <div role="region" aria-label="New entry" className="bg-paper pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="mx-auto max-w-3xl px-3 sm:px-4">
         {error && (
-          <p role="alert" className="mb-2 text-sm text-danger">
+          <p role="alert" className="mb-2 px-1 text-sm text-danger">
             {error}
           </p>
         )}
-        {files.length > 0 && (
-          <div className="mb-2">
-            <PendingFiles
-              files={files}
-              onRemove={(id) =>
-                setFiles((fs) => {
-                  releasePending(fs.filter((f) => f.id === id));
-                  return fs.filter((f) => f.id !== id);
-                })
-              }
-            />
-          </div>
-        )}
-        <div className="flex items-end gap-2">
-          <div className="max-h-[40vh] min-w-0 flex-1 overflow-y-auto py-1">
+        {/* A rounded input box, like Claude's: writing on top, controls below. */}
+        <div className="rounded-2xl border border-rule bg-surface px-4 pb-2 pt-3 shadow-[0_1px_6px_rgba(0,0,0,0.04)] transition-colors focus-within:border-faint">
+          {files.length > 0 && (
+            <div className="mb-2">
+              <PendingFiles
+                files={files}
+                onRemove={(id) =>
+                  setFiles((fs) => {
+                    releasePending(fs.filter((f) => f.id === id));
+                    return fs.filter((f) => f.id !== id);
+                  })
+                }
+              />
+            </div>
+          )}
+          <div className="max-h-[40vh] overflow-y-auto">
             <LiveEditor
               ref={editor}
               value={text}
@@ -118,16 +120,24 @@ export function Composer({ onPosted, ref }: { onPosted: (entry: EntryDto) => voi
               ariaLabel="New journal entry"
             />
           </div>
-          <AttachButton onFiles={addFiles} />
-          <button
-            type="button"
-            onClick={post}
-            disabled={!canPost}
-            title="Post (⌘/Ctrl + Enter)"
-            className="mb-1 rounded-full bg-ink px-3.5 py-1 text-sm font-medium text-paper transition-opacity disabled:opacity-25"
-          >
-            {posting ? (progress !== null && progress < 1 ? `${Math.round(progress * 100)}%` : "Posting…") : "Post"}
-          </button>
+          <div className="mt-1 flex items-center justify-between">
+            <div className="-ml-1.5">
+              <AttachButton onFiles={addFiles} />
+            </div>
+            <div className="flex items-center gap-2">
+              {progress !== null && progress < 1 && <span className="text-xs tabular-nums text-muted">{Math.round(progress * 100)}%</span>}
+              <button
+                type="button"
+                onClick={post}
+                disabled={!canPost}
+                aria-label="Post"
+                title="Post (⌘/Ctrl + Enter)"
+                className="flex size-8 items-center justify-center rounded-full bg-ink text-paper transition-opacity disabled:opacity-20"
+              >
+                <ArrowUp size={17} strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

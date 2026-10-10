@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Pencil, Trash2 } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { LiveEditor, type LiveEditorHandle } from "@/components/live-editor/live-editor";
 import { Markdown } from "@/components/markdown";
@@ -29,12 +30,11 @@ function saveEntry(id: string, parts: { body?: string; remove?: string[]; files?
 }
 
 /**
- * One journal entry. Click the text to edit it in place; it saves when you
- * click away (or Cmd/Ctrl+Enter, or Escape). Files can be added or removed
- * directly.
+ * One journal entry. The pencil opens it for editing (text, plus adding or
+ * removing files); the bin deletes it after a confirmation.
  */
 export const EntryItem = memo(function EntryItem({ entry, onUpdated, onDeleted }: Props) {
-  const [editing, setEditing] = useState<{ x: number; y: number } | "end" | null>(null);
+  const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,29 +63,28 @@ export const EntryItem = memo(function EntryItem({ entry, onUpdated, onDeleted }
     });
   };
 
+  const icon = "rounded-md p-1.5 text-faint transition-colors hover:bg-accent-soft";
+
   return (
     <article id={`entry-${entry.id}`} data-entry-id={entry.id} className="group relative scroll-mt-16 py-3">
-      <header className="mb-1 flex min-h-6 items-center gap-2 text-xs text-faint">
+      <header className="mb-1 flex min-h-7 items-center gap-2 text-xs text-faint">
         <time dateTime={entry.created} title={`${formatShortDate(entry.created)} ${formatTime(entry.created)}`} className="tabular-nums text-muted">
           {formatTime(entry.created)}
         </time>
         {edited && <span title={`Edited ${formatShortDate(entry.updated)} ${formatTime(entry.updated)}`}>edited</span>}
         {busy && <span>{busy}</span>}
-        <span className="ml-auto flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-          {!entry.body && !editing && !entry.problem && (
-            <button type="button" onClick={() => setEditing("end")} className="rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-ink">
-              Add text
+        {!editing && (
+          <span className="ml-auto flex items-center opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+            {!entry.problem && (
+              <button type="button" onClick={() => setEditing(true)} aria-label="Edit entry" title="Edit" className={`${icon} hover:text-ink`}>
+                <Pencil size={15} strokeWidth={1.7} aria-hidden="true" />
+              </button>
+            )}
+            <button type="button" onClick={() => setConfirmDelete(true)} aria-label="Delete entry" title="Delete" className={`${icon} hover:text-danger`}>
+              <Trash2 size={15} strokeWidth={1.7} aria-hidden="true" />
             </button>
-          )}
-          {!entry.problem && <AttachButton label="Attach files" onFiles={attach} />}
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-danger"
-          >
-            Delete
-          </button>
-        </span>
+          </span>
+        )}
       </header>
 
       {entry.problem && (
@@ -98,45 +97,46 @@ export const EntryItem = memo(function EntryItem({ entry, onUpdated, onDeleted }
       {editing ? (
         <EntryEditor
           entry={entry}
-          focusAt={editing}
-          onDone={(updated) => {
-            setEditing(null);
-            if (updated) {
-              changed();
-              onUpdated(updated);
-            }
+          onSaved={(updated) => {
+            changed();
+            onUpdated(updated);
           }}
+          onDone={() => setEditing(false)}
         />
       ) : (
-        entry.body && (
-          <div
-            onClick={(e) => {
-              if (entry.problem) return;
-              const target = e.target as HTMLElement;
-              if (target.closest("a, button, input, img")) return;
-              if (window.getSelection()?.toString()) return; // selecting text to copy
-              setEditing({ x: e.clientX, y: e.clientY });
-            }}
-            className={entry.problem ? "" : "cursor-text"}
-          >
-            <Markdown>{entry.body}</Markdown>
-          </div>
-        )
+        entry.body && <Markdown>{entry.body}</Markdown>
       )}
 
       <AttachmentList
         attachments={entry.attachments}
         onRemove={
-          entry.problem
-            ? undefined
-            : (file) =>
+          editing
+            ? (file) =>
                 run("Removing…", async () => {
                   const updated = await saveEntry(entry.id, { remove: [file] });
                   changed();
                   onUpdated(updated);
                 })
+            : undefined
         }
       />
+
+      {editing && (
+        <div className="mt-2 flex items-center gap-2">
+          <div className="-ml-1.5">
+            <AttachButton label="Attach files" onFiles={attach} />
+          </div>
+          <span className="mr-auto hidden text-xs text-faint sm:inline">⌘/Ctrl + B bold · I italic · K link</span>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-ink px-3 py-1 text-sm font-medium text-paper"
+          >
+            <Check size={15} aria-hidden="true" />
+            Done
+          </button>
+        </div>
+      )}
 
       {confirmDelete && (
         <div role="alertdialog" aria-label="Delete entry" className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-danger/5 px-3 py-2 text-sm">
@@ -167,47 +167,68 @@ export const EntryItem = memo(function EntryItem({ entry, onUpdated, onDeleted }
   );
 });
 
-/** The entry's text as a live editor; saves on leaving it. */
+/**
+ * The entry's text as a live editor. Saves whenever you click away (so
+ * nothing is lost) and finishes on Done, Escape or Cmd/Ctrl+Enter.
+ */
 function EntryEditor({
   entry,
-  focusAt,
+  onSaved,
   onDone,
 }: {
   entry: EntryDto;
-  focusAt: { x: number; y: number } | "end";
-  onDone: (updated: EntryDto | null) => void;
+  onSaved: (updated: EntryDto) => void;
+  onDone: () => void;
 }) {
   const editor = useRef<LiveEditorHandle>(null);
   const [text, setText] = useState(entry.body);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(entry.body);
+  const saved = useRef(entry.body);
 
   useEffect(() => {
-    editor.current?.focus(focusAt);
-    // Focus once, where the entry was clicked.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    editor.current?.focus("end");
   }, []);
 
-  async function finish() {
+  const inflight = useRef<Promise<boolean> | null>(null);
+
+  // Blur, Done and closing can all ask to save at once; share one request.
+  function save(): Promise<boolean> {
+    inflight.current ??= doSave().finally(() => {
+      inflight.current = null;
+    });
+    return inflight.current;
+  }
+
+  async function doSave(): Promise<boolean> {
     const body = latest.current;
-    if (body.trim() === entry.body.trim()) {
-      onDone(null);
-      return;
-    }
+    if (body.trim() === saved.current.trim()) return true;
     if (!body.trim() && !entry.attachments.length) {
       setError("An entry needs some text or an attachment. To remove it, use Delete.");
-      editor.current?.focus("end");
-      return;
+      return false;
     }
     setSaving(true);
     try {
-      onDone(await saveEntry(entry.id, { body }));
+      const updated = await saveEntry(entry.id, { body });
+      saved.current = body;
+      setError(null);
+      onSaved(updated);
+      return true;
     } catch (err) {
-      setSaving(false);
       setError(err instanceof Error ? `${err.message} Your text is still here.` : "Couldn't save. Your text is still here.");
+      return false;
+    } finally {
+      setSaving(false);
     }
   }
+
+  // Save when the entry closes (Done), as well as on blur.
+  useEffect(() => () => void save(), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const finish = async () => {
+    if (await save()) onDone();
+  };
 
   return (
     <div>
@@ -218,11 +239,12 @@ function EntryEditor({
           latest.current = v;
           setText(v);
         }}
-        onBlur={() => void finish()}
+        onBlur={() => void save()}
         onSubmit={() => void finish()}
         onEscape={() => void finish()}
         ariaLabel="Edit journal entry"
         placeholder="Write something…"
+        className="-mx-2 rounded-md bg-accent-soft/40 px-2 py-1"
       />
       {(saving || error) && (
         <p role={error ? "alert" : undefined} className={`mt-1 text-xs ${error ? "text-danger" : "text-faint"}`}>

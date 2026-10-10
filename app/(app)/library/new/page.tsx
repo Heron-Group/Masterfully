@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
+import { BackLink } from "@/components/back-link";
 import { ui } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { getContentStore } from "@/lib/content";
@@ -11,9 +11,7 @@ export const metadata: Metadata = { title: "Add source" };
 export default function NewSourcePage(props: PageProps<"/library/new">) {
   return (
     <main className={ui.page}>
-      <Link href="/library" className="text-sm text-muted hover:text-ink">
-        ← Library
-      </Link>
+      <BackLink to="library" />
       <h1 className="sr-only">Add a source</h1>
       <div className="mt-6" />
       <Suspense fallback={<p className="text-sm text-faint">Loading…</p>}>

@@ -22,7 +22,7 @@ async function postEntry(page: Page, text: string) {
 async function deleteEntry(page: Page, text: string) {
   const article = page.locator("article", { hasText: text });
   await article.hover();
-  await article.getByRole("button", { name: "Delete", exact: true }).click();
+  await article.getByRole("button", { name: "Delete entry" }).click();
   await article.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
   await expect(article).toHaveCount(0);
 }
@@ -96,18 +96,25 @@ test("a draft survives a reload", async ({ page }) => {
   await setEditorText(page, composer(page), "");
 });
 
-test("click an entry to edit it in place; it saves on leaving", async ({ page }) => {
+test("the pencil opens an entry for editing; Done saves it", async ({ page }) => {
   await signIn(page);
   const text = `E2E edit ${Date.now()}`;
   await postEntry(page, text);
   const article = page.locator("article", { hasText: text });
   await page.waitForTimeout(1100); // timestamps have one-second resolution
+  // Clicking the text alone doesn't start editing.
   await article.locator(".prose-rp").click();
+  await expect(page.getByRole("textbox", { name: "Edit journal entry" })).toHaveCount(0);
+  await expect(article.getByRole("button", { name: "Attach files" })).toHaveCount(0);
+  await article.hover();
+  await article.getByRole("button", { name: "Edit entry" }).click();
   const editor = page.getByRole("textbox", { name: "Edit journal entry" });
   await expect(editor).toBeFocused();
+  await expect(article.getByRole("button", { name: "Attach files" })).toBeVisible();
   await page.keyboard.press("End");
   await page.keyboard.insertText(" (revised)");
-  await page.keyboard.press("Escape");
+  await article.getByRole("button", { name: "Done" }).click();
+  await expect(editor).toHaveCount(0);
   await expect(page.locator("article", { hasText: `${text} (revised)` })).toContainText("edited");
   await deleteEntry(page, `${text} (revised)`);
 });
@@ -147,27 +154,6 @@ test("a pasted screenshot and a PDF attach to one entry", async ({ page }) => {
   expect(res.status()).toBe(200);
   expect(res.headers()["content-type"]).toBe("application/pdf");
   await deleteEntry(page, text);
-});
-
-test("jump to date scrolls to the first entry on or after it", async ({ page }) => {
-  await signIn(page);
-  const first = scroller(page).locator("article").first();
-  await expect(first).toBeAttached();
-  const target = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-  await page.getByLabel("Jump to date").fill(target);
-  await expect
-    .poll(async () => {
-      const visible = scroller(page).locator("article");
-      const n = await visible.count();
-      for (let i = 0; i < n; i++) {
-        if (await visible.nth(i).isVisible()) {
-          const box = await visible.nth(i).boundingBox();
-          if (box && box.y > 40) return visible.nth(i).locator("time").getAttribute("datetime");
-        }
-      }
-      return null;
-    })
-    .toMatch(/^\d{4}-/);
 });
 
 test("signed-out requests can't reach files or the journal API", async ({ request }) => {

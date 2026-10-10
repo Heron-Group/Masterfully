@@ -23,11 +23,10 @@ export function Journal({ initial }: { initial: JournalPage }) {
   const [error, setError] = useState<string | null>(null);
   const [awayFromBottom, setAwayFromBottom] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [highlight, setHighlight] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
   const composer = useRef<ComposerHandle>(null);
-  const pendingScroll = useRef<{ kind: "bottom" } | { kind: "entry"; id: string } | null>(null);
+  const scrollToBottom = useRef(false);
   const dragDepth = useRef(0);
 
   useVisualViewportHeight();
@@ -65,16 +64,11 @@ export function Journal({ initial }: { initial: JournalPage }) {
     return () => observer.disconnect();
   }, [hasMore, loadOlder]);
 
+  // After posting, glide to the new entry at the bottom.
   useLayoutEffect(() => {
-    const target = pendingScroll.current;
-    const el = scroller.current;
-    if (!target || !el) return;
-    pendingScroll.current = null;
-    if (target.kind === "bottom") {
-      el.scrollTo({ top: 0, behavior: "smooth" });
-    } else {
-      document.getElementById(`entry-${target.id}`)?.scrollIntoView({ block: "start" });
-    }
+    if (!scrollToBottom.current) return;
+    scrollToBottom.current = false;
+    scroller.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [entries]);
 
   function onScroll() {
@@ -84,27 +78,6 @@ export function Journal({ initial }: { initial: JournalPage }) {
 
   function scrollToLatest() {
     scroller.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function jumpToDate(day: string) {
-    if (!day) return;
-    setError(null);
-    try {
-      const page = await jsonFetch<JournalPage>(`/api/journal?from=${day}`);
-      if (!page.entries.length) {
-        setError("There are no entries yet.");
-        return;
-      }
-      pendingScroll.current = page.targetId ? { kind: "entry", id: page.targetId } : null;
-      setEntries(page.entries);
-      setHasMore(page.hasMore);
-      if (page.targetId) {
-        setHighlight(page.targetId);
-        setTimeout(() => setHighlight(null), 2000);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't jump to that date.");
-    }
   }
 
   const onUpdated = useCallback((updated: EntryDto) => {
@@ -138,8 +111,6 @@ export function Journal({ initial }: { initial: JournalPage }) {
         composer.current?.addFiles(e.dataTransfer.files);
       }}
     >
-      <JumpToDate onJump={jumpToDate} />
-
       <div
         ref={scroller}
         onScroll={onScroll}
@@ -170,7 +141,7 @@ export function Journal({ initial }: { initial: JournalPage }) {
               {items.map((entry) => (
                 <div
                   key={entry.id}
-                  className={`-mx-3 rounded-lg px-3 transition-colors duration-700 ${highlight === entry.id ? "bg-accent-soft" : ""}`}
+                  className="-mx-3 rounded-lg px-3"
                 >
                   <EntryItem entry={entry} onUpdated={onUpdated} onDeleted={onDeleted} />
                 </div>
@@ -199,7 +170,7 @@ export function Journal({ initial }: { initial: JournalPage }) {
       <Composer
         ref={composer}
         onPosted={(entry) => {
-          pendingScroll.current = { kind: "bottom" };
+          scrollToBottom.current = true;
           setEntries((list) => [...list.filter((e) => e.id !== entry.id), entry]);
         }}
       />
@@ -209,24 +180,6 @@ export function Journal({ initial }: { initial: JournalPage }) {
           Drop files to attach them to a new entry
         </div>
       )}
-    </div>
-  );
-}
-
-function JumpToDate({ onJump }: { onJump: (day: string) => void }) {
-  return (
-    <div className="border-b border-rule">
-      <div className="mx-auto flex max-w-3xl justify-end px-4 py-1.5">
-        <label className="flex items-center gap-1.5 text-xs text-muted">
-          <span>Jump to</span>
-          <input
-            type="date"
-            aria-label="Jump to date"
-            onChange={(e) => onJump(e.target.value)}
-            className="rounded bg-transparent px-1.5 py-0.5 text-ink transition-colors hover:bg-accent-soft focus:bg-accent-soft focus:outline-none"
-          />
-        </label>
-      </div>
     </div>
   );
 }

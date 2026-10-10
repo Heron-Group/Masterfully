@@ -3,7 +3,7 @@
 import { BookOpen, Download, ExternalLink, FilePlus2, FileText, Globe, Link2, Pencil, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
-import { InlineSelect, InlineText, InlineTitle, useInlineSave } from "@/components/inline-fields";
+import { InlineAutoText, InlineSelectText, InlineTitle, useInlineSave } from "@/components/inline-fields";
 import { LiveEditor } from "@/components/live-editor/live-editor";
 import { ReaderPanel, type ReaderTab } from "@/components/reader-panel";
 import { CONTENT_CHANGED_EVENT } from "@/components/sync-status";
@@ -91,21 +91,7 @@ function ErrorText({ result }: { result: ActionResult | null }) {
   );
 }
 
-const metaValue = "text-[13px] leading-5 text-muted hover:text-ink focus:text-ink";
-
-/** A compact, muted row in the details block. */
-function Meta({ label, htmlFor, className = "", children }: { label: string; htmlFor?: string; className?: string; children: React.ReactNode }) {
-  return (
-    <div className={`grid grid-cols-[4.25rem_1fr] items-start gap-x-2 ${className}`}>
-      <label htmlFor={htmlFor} className="py-0.5 text-[12px] leading-5 text-faint">
-        {label}
-      </label>
-      <div className="min-w-0">{children}</div>
-    </div>
-  );
-}
-
-/** Title, then a small block of details edited in place, with delete. */
+/** Title, then one quiet line of details (edited in place) with delete. */
 function Details({ source }: { source: SourceDto }) {
   const { save, label, isError } = useInlineSave();
   const update = (props: SourceProps) =>
@@ -114,35 +100,44 @@ function Details({ source }: { source: SourceDto }) {
       if (r.ok) changed();
       return r;
     });
+  const dot = <span aria-hidden="true" className="px-0.5 text-faint">·</span>;
 
   return (
     <header>
       <h1 className="sr-only">{source.title}</h1>
       <InlineTitle value={source.title} onSave={(title) => void update({ title })} ariaLabel="Title" />
-      <div className="mt-2 flex items-start gap-2">
-        <div className="grid min-w-0 flex-1 gap-y-0 sm:grid-cols-[15rem_minmax(0,1fr)] sm:gap-x-6">
-          <Meta label="Authors" htmlFor="prop-authors" className="sm:col-span-2">
-            <InlineText
-              id="prop-authors"
-              multiline
-              value={source.authors.join("\n")}
-              onSave={(v) => void update({ authors: v.split(/\r?\n/) })}
-              placeholder="Surname, Firstname — one per line"
-              ariaLabel="Authors"
-              className={metaValue}
-            />
-          </Meta>
-          <Meta label="Year" htmlFor="prop-year">
-            <InlineText id="prop-year" value={source.year ? String(source.year) : ""} onSave={(year) => void update({ year })} inputMode="numeric" ariaLabel="Year" className={`${metaValue} tabular-nums`} />
-          </Meta>
-          <Meta label="Type" htmlFor="prop-type">
-            <InlineSelect<SourceType> id="prop-type" value={source.type} options={SOURCE_TYPE_OPTIONS} onSave={(type) => void update({ type })} ariaLabel="Type" className={metaValue} />
-          </Meta>
-          <Meta label="Added">
-            <span className="block py-0.5 text-[13px] leading-5 text-faint">{formatShortDate(source.added)}</span>
-          </Meta>
-        </div>
-        <DeleteControl source={source} />
+      <div className="mt-1 flex flex-wrap items-center gap-y-1 text-[13px] text-muted">
+        <InlineAutoText
+          value={source.authors.join("; ")}
+          onSave={(v) => void update({ authors: v.split(";") })}
+          placeholder="Authors"
+          ariaLabel="Authors"
+          title="Authors — separate several with a semicolon"
+          className="-ml-1.5"
+        />
+        {dot}
+        <InlineAutoText
+          value={source.year ? String(source.year) : ""}
+          onSave={(year) => void update({ year })}
+          placeholder="Year"
+          ariaLabel="Year"
+          inputMode="numeric"
+          className="tabular-nums"
+        />
+        {dot}
+        <InlineSelectText<SourceType>
+          value={source.type}
+          options={SOURCE_TYPE_OPTIONS}
+          onSave={(type) => void update({ type })}
+          ariaLabel="Type"
+        />
+        {dot}
+        <span className="px-1.5 text-faint" title="Date added">
+          Added {formatShortDate(source.added)}
+        </span>
+        <span className="ml-auto">
+          <DeleteControl source={source} />
+        </span>
       </div>
       {label && (
         <p role={isError ? "alert" : "status"} className={`mt-1 text-xs ${isError ? "text-danger" : "text-faint"}`}>
@@ -326,7 +321,7 @@ function PdfRow({ source, reading, onRead }: { source: SourceDto; reading: ReadK
           className={`-mx-1.5 flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-[15px] transition-colors hover:bg-accent-soft/70 hover:text-ink ${dragging ? "bg-accent-soft text-ink" : "text-faint"}`}
         >
           <FilePlus2 size={17} strokeWidth={1.6} aria-hidden="true" />
-          Add a PDF <span className="text-xs">— click or drop a file, up to 50 MB</span>
+          Add a PDF
           {fileInput}
         </label>
       )}
@@ -365,6 +360,7 @@ function PdfRow({ source, reading, onRead }: { source: SourceDto; reading: ReadK
 
 function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: ReadKind | null; onRead: (k: ReadKind | null) => void }) {
   const [editing, setEditing] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [draft, setDraft] = useState(source.url ?? "");
   const { save, label, isError } = useInlineSave();
 
@@ -429,7 +425,7 @@ function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: Read
             >
               <Pencil size={15} aria-hidden="true" />
             </button>
-            <button type="button" onClick={() => void commit("")} className={iconButton} title="Remove link" aria-label="Remove link">
+            <button type="button" onClick={() => setConfirmRemove(true)} className={iconButton} title="Remove link" aria-label="Remove link">
               <X size={15} aria-hidden="true" />
             </button>
           </div>
@@ -444,8 +440,26 @@ function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: Read
           className="-mx-1.5 flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[15px] text-faint transition-colors hover:bg-accent-soft/70 hover:text-ink"
         >
           <Link2 size={17} strokeWidth={1.6} aria-hidden="true" />
-          Add a link <span className="text-xs">— a web page or online article</span>
+          Add a link
         </button>
+      )}
+      {confirmRemove && (
+        <div role="alertdialog" aria-label="Remove link" className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-danger/5 px-3 py-2 text-sm">
+          <span className="mr-auto">Remove the link from this source?</span>
+          <button type="button" onClick={() => setConfirmRemove(false)} className={ui.btnGhost}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmRemove(false);
+              void commit("");
+            }}
+            className={ui.btnDanger}
+          >
+            Remove
+          </button>
+        </div>
       )}
       {label && (
         <p role={isError ? "alert" : "status"} className={`mt-1 text-xs ${isError ? "text-danger" : "text-faint"}`}>

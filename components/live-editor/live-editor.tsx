@@ -5,6 +5,7 @@ import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-mar
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderExt } from "@codemirror/view";
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import { formatKeymap } from "./format-commands";
 import { liveMarkdown } from "./live-markdown";
 
 export type LiveEditorHandle = {
@@ -71,6 +72,7 @@ export function LiveEditor({
           keymap.of([
             { key: "Mod-Enter", run: () => (callbacks.current.onSubmit?.(), !!callbacks.current.onSubmit) },
             { key: "Escape", run: (v) => (callbacks.current.onEscape ? callbacks.current.onEscape() : v.contentDOM.blur(), true) },
+            ...formatKeymap,
             ...markdownKeymap,
             ...defaultKeymap,
             ...historyKeymap,
