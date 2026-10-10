@@ -152,7 +152,7 @@ export function ReaderPanel({
         {tab.key === "pdf" ? (
           <PdfViewer key={src} url={src} title={title} />
         ) : (
-          <iframe key={src} src={src} title={`${tab.label}: ${title}`} className="min-h-0 w-full flex-1 bg-surface" />
+          <iframe key={src} src={src} title={`${tab.label}: ${title}`} className={`min-h-0 w-full flex-1 ${tab.key === "link" ? (theme === "dark" ? "bg-black" : "bg-white") : "bg-surface"}`} />
         )}
       </div>
     </aside>
