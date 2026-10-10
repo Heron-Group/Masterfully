@@ -11,6 +11,7 @@
 
 export const SOURCE_SECTIONS = ["Notes", "AI summary"] as const;
 export const GROUP_SECTIONS = ["Overview", "AI summary"] as const;
+export const NOTE_SECTIONS = ["Notes", "AI summary"] as const;
 export const AI_SUMMARY = "AI summary";
 
 type Span = { name: string; start: number; end: number }; // line indices, end exclusive

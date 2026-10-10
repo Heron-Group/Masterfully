@@ -5,19 +5,6 @@ import OpenAI from "openai";
 import { fakeAiEnabled } from "@/lib/ai/client";
 import { AI_PROVIDERS, getAiSettings, updateAiSettings, type AiProvider, type AiSettingsView } from "@/lib/ai/user-config";
 import { requireSession } from "@/lib/auth";
-import { ContentError, getContentStore } from "@/lib/content";
-
-export async function saveResearchContext(text: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireSession();
-  try {
-    await (await getContentStore()).setResearchContext(text);
-    return { ok: true };
-  } catch (err) {
-    if (err instanceof ContentError) return { ok: false, error: err.message };
-    console.error(err);
-    return { ok: false, error: "Something went wrong on the server. Nothing was saved." };
-  }
-}
 
 export type AiSettingsResult = { ok: true; settings: AiSettingsView; warning?: string } | { ok: false; error: string };
 

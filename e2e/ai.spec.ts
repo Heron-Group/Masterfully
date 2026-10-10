@@ -9,16 +9,6 @@ test.describe.configure({ mode: "serial" });
 
 const read = (rel: string) => readFileSync(workspace(rel), "utf8");
 
-test("research context saves to settings.md", async ({ page }) => {
-  await signIn(page, "/settings");
-  await expect(page.getByText("summaries are simulated")).toBeVisible();
-  const editor = page.getByRole("textbox", { name: "Research context" });
-  const text = `How can graphic language support co-design with community groups? (${Date.now()})`;
-  await editor.fill(text);
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible({ timeout: 10_000 });
-  expect(read("settings.md")).toContain(text);
-});
-
 test("source summary streams in, is labelled, and changes only the AI section", async ({ page }) => {
   const before = read("sources/ingold-2013-making.md");
   await signIn(page, "/library/ingold-2013-making");

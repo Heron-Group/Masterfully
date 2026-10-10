@@ -14,6 +14,7 @@ import {
   getAiSummary,
   getSection,
   GROUP_SECTIONS,
+  NOTE_SECTIONS,
   SOURCE_SECTIONS,
 } from "./sections";
 
@@ -82,6 +83,21 @@ export type Group = {
   /** Last time sources were added, removed or reordered; used for staleness. */
   sourcesChanged?: string;
   overview: string;
+  aiSummary: AiSummary | null;
+  body: string;
+  problem?: string;
+  extra: Record<string, unknown>;
+};
+
+export type Note = {
+  id: string;
+  path: string;
+  title: string;
+  created: string;
+  updated: string;
+  attachments: Attachment[];
+  /** The note itself: the `## Notes` section (or the whole body of a hand-written file). */
+  text: string;
   aiSummary: AiSummary | null;
   body: string;
   problem?: string;
@@ -276,6 +292,42 @@ export function serializeGroup(group: Group): string {
       ...group.extra,
     },
     group.body,
+  );
+}
+
+// --- Notes ------------------------------------------------------------------
+
+const NOTE_KEYS = ["id", "title", "created", "updated", "attachments"] as const;
+
+export function parseNote(raw: string, meta: { id: string; path: string; fallbackDate: string }): Note {
+  const { data, body, error } = parseFile(raw);
+  const created = isoDate(data.created, meta.fallbackDate);
+  return {
+    id: meta.id,
+    path: meta.path,
+    title: str(data.title).trim() || meta.id,
+    created,
+    updated: isoDate(data.updated, created),
+    attachments: readAttachments(data.attachments),
+    text: getSection(body, "Notes", NOTE_SECTIONS, { preambleFallback: true }),
+    aiSummary: getAiSummary(body, NOTE_SECTIONS),
+    body,
+    problem: error,
+    extra: extraFields(data, NOTE_KEYS),
+  };
+}
+
+export function serializeNote(note: Note): string {
+  return stringifyFile(
+    {
+      id: note.id,
+      title: note.title,
+      created: note.created,
+      updated: note.updated,
+      attachments: note.attachments.length ? note.attachments : undefined,
+      ...note.extra,
+    },
+    note.body,
   );
 }
 

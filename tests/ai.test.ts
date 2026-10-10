@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fetchReadable, isPrivateAddress } from "@/lib/ai/fetch-url";
 import { groupPrompt, sourcePrompt } from "@/lib/ai/prompts";
-import { summariseGroup, summariseSource } from "@/lib/ai/summarise";
+import { summariseGroup, summariseNote, summariseSource } from "@/lib/ai/summarise";
 import { ContentStore } from "@/lib/content/store";
 import type { AiEvent } from "@/lib/dto";
 
@@ -137,5 +137,20 @@ describe("summaries (simulated API)", () => {
     await new Promise((r) => setTimeout(r, 1100));
     await collect(summariseSource(store, a.id, fake));
     expect(store.isGroupSummaryStale((await store.getGroup("g"))!)).toBe(true);
+  });
+
+  it("summarises a note and keeps its text", async () => {
+    const note = await store.createNote({ title: "Studio day", text: "The hinge tore again.\n\n## My own heading\n\nKept" });
+    const events = await collect(summariseNote(store, note.id, fake));
+    expect(events.at(-1)).toMatchObject({ type: "done", summary: { model: "fake-model" } });
+    const after = (await store.getNote(note.id))!;
+    expect(after.text).toBe("The hinge tore again.\n\n## My own heading\n\nKept");
+    expect(after.aiSummary?.model).toBe("fake-model");
+  });
+
+  it("won't summarise an empty note", async () => {
+    const note = await store.createNote({ title: "Empty" });
+    const events = await collect(summariseNote(store, note.id, fake));
+    expect(events.at(-1)).toMatchObject({ type: "error", message: expect.stringContaining("Write something") });
   });
 });

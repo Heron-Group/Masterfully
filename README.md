@@ -1,8 +1,9 @@
 # Research Portal
 
 A private web app for practice-led PhD research: a **research journal** that
-works like a messaging app, and a **reading list** of sources organised into
-reading groups, with optional AI summaries.
+works like a messaging app, **notes** for longer writing with attachments, and a
+**reading list** of sources organised into reading groups, with optional AI
+summaries.
 
 Anyone can sign up with a **Google or Microsoft account**; each person gets their
 own private workspace. AI summaries use each person's **own Claude or OpenAI API
@@ -126,8 +127,10 @@ research-content/
     journal/2026/10/2026-10-09T14-32-05Z.md     one file per entry
     sources/brody-2025-graphic-language.md      one file per source
     groups/co-design-foundations.md             one file per reading group
+    notes/workshop-reflections.md               one file per note
     attachments/sources/<source id>.pdf
     attachments/journal/<entry id>/<files>
+    attachments/notes/<note id>/<files>
     settings.md                                 their research context
 ```
 
@@ -317,7 +320,10 @@ and a failed call changes nothing.
 - **Group summaries** use each source's details, your notes, the group note and
   the source's AI summary, not the full PDFs. They are marked **out of date**
   when sources are added, removed or re-summarised.
-- Your **research context** (Settings) is included in every prompt.
+- **Note summaries** use the note's text and up to three attached PDFs (each
+  small enough to send whole); other attachments are named but not read.
+- A **research context** in `settings.md` (edit it in a text editor; it is no
+  longer shown in Settings) is included in every prompt.
 
 **Each user brings their own key.** In **Settings → AI summaries**, choose
 Claude or OpenAI and paste an API key. It is checked with the provider (a free

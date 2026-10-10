@@ -1,12 +1,12 @@
 import "server-only";
 import { promises as fs } from "node:fs";
-import type { Group, Source } from "../content";
+import type { Group, Note, Source } from "../content";
 import type { ContentStore } from "../content/store";
 import type { AiEvent } from "../dto";
 import { fakeAiEnabled } from "./client";
 import { fetchReadable } from "./fetch-url";
 import { MAX_DIRECT_PDF_BYTES, MAX_DIRECT_PDF_PAGES, pdfPageCount, pdfTextChunks } from "./pdf";
-import { chunkPrompt, groupPrompt, sourcePrompt, type SourceMaterial, type SourceMeta } from "./prompts";
+import { chunkPrompt, groupPrompt, notePrompt, sourcePrompt, type SourceMaterial, type SourceMeta } from "./prompts";
 import { AiError, describeError, isBadRequest, runModel, type AiBackend, type Part, type RunOptions, type RunResult } from "./providers";
 import { getAiCredentials } from "./user-config";
 
@@ -177,6 +177,78 @@ export async function* summariseGroup(store: ContentStore, id: string, opts: Opt
     );
     if (!result.text) throw new AiError("The model returned an empty summary. Nothing was saved.", "api");
     const saved = await store.setGroupAiSummary(id, { text: result.text, model: result.model });
+    yield {
+      type: "done",
+      summary: saved.aiSummary ?? { text: result.text, model: result.model },
+      warning: result.truncated ? "The summary hit the length limit and may be cut short." : undefined,
+    };
+  } catch (err) {
+    if (opts.signal?.aborted) return;
+    yield { type: "error", ...describeError(err, opts.backend ?? undefined) };
+  }
+}
+
+/** At most this many attached PDFs are sent with a note summary. */
+const MAX_NOTE_PDFS = 3;
+
+/** Summarise a note: its text, and any attached PDFs small enough to send whole. */
+export async function* summariseNote(store: ContentStore, id: string, opts: Opts): AsyncGenerator<AiEvent> {
+  if (!opts.backend) {
+    yield { type: "error", code: "not_configured", message: NOT_CONFIGURED };
+    return;
+  }
+  const note: Note | null = await store.getNote(id);
+  if (!note) {
+    yield { type: "error", code: "not_found", message: "Note not found." };
+    return;
+  }
+  const pdfs: { name: string; data: Buffer }[] = [];
+  const skipped: string[] = [];
+  const others: string[] = [];
+  for (const a of note.attachments) {
+    if (a.type !== "application/pdf") {
+      others.push(a.name);
+      continue;
+    }
+    const abs = await store.attachmentPath(a.file);
+    const data = abs ? await fs.readFile(abs) : null;
+    const pages = data ? await pdfPageCount(data) : null;
+    if (data && pdfs.length < MAX_NOTE_PDFS && data.length <= MAX_DIRECT_PDF_BYTES && (pages ?? 0) <= MAX_DIRECT_PDF_PAGES) {
+      pdfs.push({ name: a.name, data });
+    } else {
+      skipped.push(a.name);
+    }
+  }
+  if (!note.text.trim() && !pdfs.length) {
+    yield { type: "error", code: "api", message: "Write something in the note (or attach a PDF) first." };
+    return;
+  }
+  if (skipped.length) {
+    yield {
+      type: "notice",
+      message: `Not included (too large, or more than ${MAX_NOTE_PDFS} PDFs): ${skipped.join(", ")}.`,
+    };
+  }
+  const { researchContext } = await store.getSettings();
+  try {
+    const result = yield* run(
+      [
+        ...pdfs.map((p): Part => ({ type: "pdf", data: p.data })),
+        {
+          type: "text",
+          text: notePrompt({
+            title: note.title,
+            text: note.text,
+            pdfNames: pdfs.map((p) => p.name),
+            otherAttachments: [...others, ...skipped],
+            researchContext,
+          }),
+        },
+      ],
+      opts,
+    );
+    if (!result.text) throw new AiError("The model returned an empty summary. Nothing was saved.", "api");
+    const saved = await store.setNoteAiSummary(id, { text: result.text, model: result.model });
     yield {
       type: "done",
       summary: saved.aiSummary ?? { text: result.text, model: result.model },

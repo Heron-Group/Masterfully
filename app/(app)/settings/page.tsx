@@ -2,13 +2,11 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ui } from "@/components/ui";
-import { fakeAiEnabled } from "@/lib/ai/client";
 import { getAiSettings } from "@/lib/ai/user-config";
 import { requireSession } from "@/lib/auth";
 import { getAccounts, getWorkspaceStore } from "@/lib/content";
 import { serverConfig } from "@/lib/config";
 import { AiSettings } from "./ai-settings";
-import { ResearchContextEditor } from "./research-context-editor";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -29,7 +27,7 @@ const SIGN_IN_LABELS: Record<string, string> = { google: "Google", microsoft: "M
 async function SettingsContent() {
   const account = await requireSession();
   const store = await getWorkspaceStore(account);
-  const [settings, ai, accounts] = await Promise.all([store.getSettings(), getAiSettings(account.id), getAccounts()]);
+  const [ai, accounts] = await Promise.all([getAiSettings(account.id), getAccounts()]);
   const owner = accounts.isOwner(account);
   const config = serverConfig();
   const methods = [...new Set(account.identities.flatMap((i) => SIGN_IN_LABELS[i.provider] ?? []))];
@@ -52,16 +50,6 @@ async function SettingsContent() {
         </div>
       </section>
 
-      <section aria-labelledby="context-heading">
-        <h2 id="context-heading" className={`${ui.h2} mb-2`}>
-          Research context
-        </h2>
-        <p className="mb-3 max-w-prose text-sm text-muted">
-          Your current research question and focus, in a few sentences. Every AI summary is written with this in mind.
-        </p>
-        <ResearchContextEditor initial={settings.researchContext} />
-      </section>
-
       <section id="ai" aria-labelledby="ai-heading" className="scroll-mt-8">
         <h2 id="ai-heading" className={`${ui.h2} mb-2`}>
           AI summaries
@@ -70,7 +58,7 @@ async function SettingsContent() {
           Summaries are written by Claude or OpenAI using your own API key. The key is stored encrypted on the server,
           never in your notes or their backup, and only used when you ask for a summary.
         </p>
-        <AiSettings initial={ai} simulated={fakeAiEnabled()} />
+        <AiSettings initial={ai} />
       </section>
 
       <section aria-labelledby="storage-heading">
@@ -78,7 +66,7 @@ async function SettingsContent() {
           Storage and backup
         </h2>
         <p className="max-w-prose text-sm text-muted">
-          Your journal and reading list are saved as Markdown files in your own private folder and backed up with Git
+          Your journal, notes and reading list are saved as Markdown files in your own private folder and backed up with Git
           {config.git.remote ? " to a private GitHub repository" : ""}. Other users can&apos;t see them.
         </p>
         {owner && (

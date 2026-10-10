@@ -1,7 +1,16 @@
 import "server-only";
 import { ContentError } from "./content";
-import type { Group, JournalEntry, Source } from "./content";
-import { fileUrl, IMAGE_TYPES, type EntryDto, type GroupDto, type SourceDto } from "./dto";
+import type { Attachment, Group, JournalEntry, Note, Source } from "./content";
+import {
+  fileUrl,
+  IMAGE_TYPES,
+  type AttachmentDto,
+  type EntryDto,
+  type GroupDto,
+  type NoteDto,
+  type NoteListItemDto,
+  type SourceDto,
+} from "./dto";
 import type { ContentStore } from "./content/store";
 
 export function entryToDto(e: JournalEntry): EntryDto {
@@ -11,16 +20,35 @@ export function entryToDto(e: JournalEntry): EntryDto {
     updated: e.updated,
     body: e.body,
     problem: e.problem,
-    attachments: e.attachments.map((a) => {
-      const isImage = IMAGE_TYPES.includes(a.type);
-      return {
-        ...a,
-        url: fileUrl(a.file),
-        thumbUrl: isImage && a.type !== "image/gif" ? fileUrl(a.file, { thumb: true }) : undefined,
-        isImage,
-      };
-    }),
+    attachments: e.attachments.map(attachmentToDto),
   };
+}
+
+function attachmentToDto(a: Attachment): AttachmentDto {
+  const isImage = IMAGE_TYPES.includes(a.type);
+  return {
+    ...a,
+    url: fileUrl(a.file),
+    thumbUrl: isImage && a.type !== "image/gif" ? fileUrl(a.file, { thumb: true }) : undefined,
+    isImage,
+  };
+}
+
+export function noteToDto(n: Note): NoteDto {
+  return {
+    id: n.id,
+    title: n.title,
+    created: n.created,
+    updated: n.updated,
+    text: n.text,
+    attachments: n.attachments.map(attachmentToDto),
+    aiSummary: n.aiSummary,
+    problem: n.problem,
+  };
+}
+
+export function noteToListItem(n: Note): NoteListItemDto {
+  return { id: n.id, title: n.title, updated: n.updated, text: n.text, attachments: n.attachments.length };
 }
 
 /** Turn a thrown error into a JSON response; ContentErrors carry their own status. */

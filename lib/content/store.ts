@@ -18,12 +18,15 @@ import {
   type Group,
   type GroupSourceRef,
   type JournalEntry,
+  type Note,
   parseGroup,
   parseJournalEntry,
+  parseNote,
   parseSettings,
   parseSource,
   serializeGroup,
   serializeJournalEntry,
+  serializeNote,
   serializeSettings,
   serializeSource,
   type Settings,
@@ -32,6 +35,7 @@ import {
 } from "./schemas";
 import {
   GROUP_SECTIONS,
+  NOTE_SECTIONS,
   replaceSection,
   setAiSummary,
   SOURCE_SECTIONS,
@@ -66,11 +70,12 @@ export const DIRS = {
   journal: "journal",
   sources: "sources",
   groups: "groups",
+  notes: "notes",
   attachments: "attachments",
 } as const;
 export const SETTINGS_FILE = "settings.md";
 
-/** Ids that would clash with page addresses (/library/new, /groups/new). */
+/** Ids that would clash with page addresses (/library/new, /groups/new, /notes/new). */
 const RESERVED_IDS = new Set(["new"]);
 
 const CONTENT_GITIGNORE = `.DS_Store\nThumbs.db\n.obsidian/workspace*\n.trash/\n`;
@@ -107,6 +112,7 @@ export class ContentStore {
   private journalSorted: JournalEntry[] | null = null;
   private sources = new Map<string, Source>();
   private groups = new Map<string, Group>();
+  private notes = new Map<string, Note>();
   private settingsCache: Settings = { researchContext: "", extra: {} };
   /** relative path → mtimeMs at last parse */
   private mtimes = new Map<string, number>();
@@ -178,6 +184,7 @@ export class ContentStore {
       this.journal.clear();
       this.sources.clear();
       this.groups.clear();
+      this.notes.clear();
       this.mtimes.clear();
       this.journalSorted = null;
     });
@@ -232,6 +239,15 @@ export class ContentStore {
       if (group) this.groups.set(group.id, group);
     }
 
+    for (const abs of await listMarkdown(this.abs(DIRS.notes), false)) {
+      const rel = this.rel(abs);
+      seen.add(rel);
+      const note = await this.parseIfChanged(rel, (raw, fallbackDate) =>
+        parseNote(raw, { id: stem(rel), path: rel, fallbackDate }),
+      );
+      if (note) this.notes.set(note.id, note);
+    }
+
     if (await exists(this.abs(SETTINGS_FILE))) {
       seen.add(SETTINGS_FILE);
       const settings = await this.parseIfChanged(SETTINGS_FILE, (raw) => parseSettings(raw));
@@ -273,6 +289,8 @@ export class ContentStore {
       this.sources.delete(id);
     } else if (rel.startsWith(`${DIRS.groups}/`) && this.groups.get(id)?.path === rel) {
       this.groups.delete(id);
+    } else if (rel.startsWith(`${DIRS.notes}/`) && this.notes.get(id)?.path === rel) {
+      this.notes.delete(id);
     }
   }
 
@@ -306,6 +324,11 @@ export class ContentStore {
           parseGroup(raw, { id: stem(rel), path: rel, fallbackDate: d }),
         );
         if (g) this.groups.set(g.id, g);
+      } else if (rel.startsWith(`${DIRS.notes}/`)) {
+        const n = await this.parseIfChanged(rel, (raw, d) =>
+          parseNote(raw, { id: stem(rel), path: rel, fallbackDate: d }),
+        );
+        if (n) this.notes.set(n.id, n);
       }
     }
   }
@@ -903,6 +926,128 @@ export class ContentStore {
       const s = this.sources.get(ref.id)?.aiSummary?.generated;
       return !!s && s > generated;
     });
+  }
+
+  // --- Notes ----------------------------------------------------------------
+
+  /** Most recently changed first. */
+  async listNotes(): Promise<Note[]> {
+    await this.refresh();
+    return [...this.notes.values()].sort((a, b) => b.updated.localeCompare(a.updated) || a.id.localeCompare(b.id));
+  }
+
+  async getNote(id: string): Promise<Note | null> {
+    await this.refresh();
+    return this.notes.get(id) ?? null;
+  }
+
+  noteAttachmentDir(id: string): string {
+    assertSafeId(id);
+    return `${DIRS.attachments}/notes/${id}`;
+  }
+
+  /** Create a note; its file name comes from the title and never changes. */
+  async createNote(input: { title: string; text?: string; attachments?: StagedFile[] }): Promise<Note> {
+    const title = input.title.trim();
+    if (!title) throw new ContentError("A note needs a title", 400);
+    return this.write(
+      (n) => `note: add ${n.id}`,
+      async (tx) => {
+        const id = uniqueId(
+          slugify(title) || "note",
+          (c) => this.notes.has(c) || RESERVED_IDS.has(c) || tx.has(`${DIRS.notes}/${c}.md`),
+        );
+        const now = this.stamp();
+        const text = (input.text ?? "").trim();
+        const note: Note = {
+          id,
+          path: `${DIRS.notes}/${id}.md`,
+          title,
+          created: now,
+          updated: now,
+          attachments: await this.moveAttachments(tx, this.noteAttachmentDir(id), input.attachments ?? []),
+          text,
+          aiSummary: null,
+          body: replaceSection("", "Notes", text, NOTE_SECTIONS, { position: "start" }),
+          extra: {},
+        };
+        await tx.writeText(note.path, serializeNote(note));
+        return note;
+      },
+    );
+  }
+
+  async renameNote(id: string, title: string): Promise<Note> {
+    if (!title.trim()) throw new ContentError("A note needs a title", 400);
+    return this.write(`note: rename ${id}`, async (tx) => {
+      const next = { ...this.requireNote(id), title: title.trim(), updated: this.stamp() };
+      await tx.writeText(next.path, serializeNote(next));
+      return next;
+    });
+  }
+
+  /** Rewrite only the `## Notes` section (the note's text). */
+  async setNoteText(id: string, text: string): Promise<Note> {
+    return this.write(`note: update ${id}`, async (tx) => {
+      const note = this.requireNote(id);
+      const body = replaceSection(note.body, "Notes", text, NOTE_SECTIONS, {
+        position: "start",
+        preambleFallback: true,
+      });
+      const next = { ...note, body, text: text.trim(), updated: this.stamp() };
+      await tx.writeText(note.path, serializeNote(next));
+      return next;
+    });
+  }
+
+  /** Add staged uploads and/or remove attachments (by `file` path). */
+  async updateNoteAttachments(id: string, input: { add?: StagedFile[]; remove?: string[] }): Promise<Note> {
+    return this.write(`note: update attachments ${id}`, async (tx) => {
+      const note = this.requireNote(id);
+      const remove = new Set(input.remove ?? []);
+      for (const file of remove) {
+        if (note.attachments.some((a) => a.file === file)) await tx.removeAttachment(file);
+      }
+      const kept = note.attachments.filter((a) => !remove.has(a.file));
+      const added = await this.moveAttachments(
+        tx,
+        this.noteAttachmentDir(id),
+        input.add ?? [],
+        new Set(kept.map((a) => a.file)),
+      );
+      const next = { ...note, attachments: [...kept, ...added], updated: this.stamp() };
+      await tx.writeText(note.path, serializeNote(next));
+      return next;
+    });
+  }
+
+  /** Rewrite only the `## AI summary` section. */
+  async setNoteAiSummary(id: string, summary: { text: string; model: string }): Promise<Note> {
+    return this.write(`note: AI summary ${id}`, async (tx) => {
+      const note = this.requireNote(id);
+      const generated = this.stamp();
+      const body = setAiSummary(note.body, { ...summary, generated }, NOTE_SECTIONS);
+      const next = { ...note, body, updated: generated };
+      await tx.writeText(note.path, serializeNote(next));
+      return next;
+    });
+  }
+
+  /** Delete a note and its attachments. */
+  async deleteNote(id: string): Promise<void> {
+    await this.write(`note: delete ${id}`, async (tx) => {
+      const note = this.requireNote(id);
+      await tx.remove(note.path);
+      for (const a of note.attachments) await tx.removeAttachment(a.file);
+      await tx.remove(this.noteAttachmentDir(id));
+    });
+  }
+
+  private requireNote(id: string): Note {
+    const note = this.notes.get(id);
+    if (!note) throw new ContentError("Note not found", 404);
+    if (note.problem) throw unreadable(note.path, note.problem);
+    return note;
   }
 
   // --- Settings -------------------------------------------------------------

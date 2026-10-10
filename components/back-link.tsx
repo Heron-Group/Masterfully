@@ -1,9 +1,10 @@
-import { Library, SquareStack } from "lucide-react";
+import { Library, SquareStack, StickyNote } from "lucide-react";
 import Link from "next/link";
 
 const SECTIONS = {
   library: { href: "/library", label: "Library", icon: Library },
   groups: { href: "/groups", label: "Reading groups", icon: SquareStack },
+  notes: { href: "/notes", label: "Notes", icon: StickyNote },
 } as const;
 
 /** A subtle button back to the section a page belongs to, with its icon. */

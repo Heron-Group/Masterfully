@@ -95,6 +95,26 @@ export type GroupDto = {
   problem?: string;
 };
 
+export type NoteDto = {
+  id: string;
+  title: string;
+  created: string;
+  updated: string;
+  text: string;
+  attachments: AttachmentDto[];
+  aiSummary: AiSummaryDto | null;
+  problem?: string;
+};
+
+export type NoteListItemDto = {
+  id: string;
+  title: string;
+  updated: string;
+  /** The note's text, for searching and a one-line preview. */
+  text: string;
+  attachments: number;
+};
+
 export type GroupListItemDto = { id: string; title: string; updated: string; count: number };
 
 /** Events streamed (as NDJSON) while an AI summary is generated. */

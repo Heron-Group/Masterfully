@@ -374,6 +374,53 @@ describe("sources and groups", () => {
   });
 });
 
+describe("notes", () => {
+  it("creates a note with attachments in one commit, edits it, and deletes it", async () => {
+    const store = await makeStore();
+    const img = await store.stageUpload(Buffer.from("fake image"));
+    const before = await store.git.commitCount();
+    const note = await store.createNote({
+      title: "Workshop reflections",
+      text: "Seven people, two hours.",
+      attachments: [{ ...img, name: "map.jpg", type: "image/jpeg" }],
+    });
+    expect(await store.git.commitCount()).toBe(before + 1);
+    expect(note.id).toBe("workshop-reflections");
+    expect(note.attachments).toEqual([
+      { file: "attachments/notes/workshop-reflections/map.jpg", name: "map.jpg", type: "image/jpeg", size: 10 },
+    ]);
+    expect((await store.createNote({ title: "New" })).id).toBe("new-2");
+
+    await store.renameNote(note.id, "Workshop reflections, week 2");
+    await store.setNoteText(note.id, "Updated text");
+    const raw = await fs.readFile(path.join(dir, "notes", "workshop-reflections.md"), "utf8");
+    expect(raw).toMatch(/title: Workshop reflections, week 2/);
+    expect(raw).toContain("## Notes\n\nUpdated text");
+
+    const pdf = await store.stageUpload(Buffer.from("%PDF-1.7"));
+    const updated = await store.updateNoteAttachments(note.id, {
+      add: [{ ...pdf, name: "paper.pdf", type: "application/pdf" }],
+      remove: ["attachments/notes/workshop-reflections/map.jpg"],
+    });
+    expect(updated.attachments.map((a) => a.name)).toEqual(["paper.pdf"]);
+    expect(await fs.stat(path.join(dir, "attachments/notes/workshop-reflections/map.jpg")).catch(() => null)).toBeNull();
+
+    await store.deleteNote(note.id);
+    expect(await store.getNote(note.id)).toBeNull();
+    expect(await fs.stat(path.join(dir, "attachments/notes/workshop-reflections")).catch(() => null)).toBeNull();
+    expect(git(dir, "status", "--porcelain")).toBe("");
+  });
+
+  it("reads a hand-written note without headings as its text", async () => {
+    const store = await makeStore();
+    await fs.mkdir(path.join(dir, "notes"), { recursive: true });
+    await fs.writeFile(path.join(dir, "notes", "by-hand.md"), "---\ntitle: By hand\n---\nJust some text.\n");
+    const note = (await store.getNote("by-hand"))!;
+    expect(note).toMatchObject({ title: "By hand", text: "Just some text.", aiSummary: null });
+    expect((await store.listNotes()).map((n) => n.id)).toEqual(["by-hand"]);
+  });
+});
+
 describe("settings", () => {
   it("stores the research context in the body", async () => {
     const store = await makeStore();

@@ -13,7 +13,7 @@ const PROVIDERS: { id: AiProvider; label: string; keyUrl: string; keyPlaceholder
 
 const DEFAULTS: Record<AiProvider, string> = { anthropic: "claude-opus-5-5", openai: "gpt-5.5" };
 
-export function AiSettings({ initial, simulated }: { initial: AiSettingsView; simulated: boolean }) {
+export function AiSettings({ initial }: { initial: AiSettingsView }) {
   const [settings, setSettings] = useState(initial);
   const [shown, setShown] = useState<AiProvider>(initial.provider ?? "anthropic");
   const [replacing, setReplacing] = useState(false);
@@ -163,7 +163,7 @@ export function AiSettings({ initial, simulated }: { initial: AiSettingsView; si
               rel="noreferrer"
               className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted hover:text-ink"
             >
-              Get a {provider.label} API key <ExternalLink className="size-3" aria-hidden />
+              Get {provider.id === "openai" ? "an" : "a"} {provider.label} API key <ExternalLink className="size-3" aria-hidden />
             </a>
           )}
         </div>
@@ -202,8 +202,6 @@ export function AiSettings({ initial, simulated }: { initial: AiSettingsView; si
       <p role="status" className="text-sm">
         {message ? (
           <span className={message.kind === "error" ? "text-danger" : "text-warn"}>{message.text}</span>
-        ) : simulated ? (
-          <span className="text-muted">Development mode: summaries are simulated (AI_FAKE=1), whatever is set here.</span>
         ) : active ? (
           <span className="text-muted">
             Ready. Summaries use {provider.label} ({settings.models[shown]}), billed to your key.

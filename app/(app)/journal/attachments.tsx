@@ -219,7 +219,12 @@ export function PendingFiles({ files, onRemove }: { files: PendingFile[]; onRemo
 
 export function AttachButton({ onFiles, label = "Attach files" }: { onFiles: (files: FileList) => void; label?: string }) {
   return (
-    <label className="cursor-pointer rounded p-1.5 text-muted transition-colors hover:text-ink" title={label}>
+    // A fixed-size flex box: as an inline element, the hidden text and file
+    // input added line boxes that made the button much taller than its icon.
+    <label
+      className="relative flex size-8 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:text-ink"
+      title={label}
+    >
       <span className="sr-only">{label}</span>
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
         <path

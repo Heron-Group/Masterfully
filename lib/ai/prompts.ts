@@ -164,3 +164,39 @@ What the group doesn't cover that my research question needs, including perspect
 ### Relation to my research question
 How the group as a whole bears on the research context.`;
 }
+
+/** The text part of a note-summary request. Attached PDFs, if any, are sent as documents alongside it. */
+export function notePrompt(input: {
+  title: string;
+  text: string;
+  pdfNames: string[];
+  otherAttachments: string[];
+  researchContext: string;
+}): string {
+  const attached = [
+    input.pdfNames.length
+      ? `Attached to the note, and included here as PDF documents: ${input.pdfNames.join(", ")}.`
+      : null,
+    input.otherAttachments.length
+      ? `Also attached, but not included here: ${input.otherAttachments.join(", ")}.`
+      : null,
+  ].filter(Boolean);
+  return `Summarise this note from my research notes. It is my own writing, so summarise and develop it rather than repeating it back.
+
+<note title="${input.title.replace(/"/g, "'")}">
+${input.text.trim() || "(The note has no text yet.)"}
+</note>
+${attached.length ? `\n${attached.join("\n")}\n` : ""}
+${researchContextBlock(input.researchContext)}
+
+Write the summary with these sections:
+
+### Summary
+The main points of the note${input.pdfNames.length ? " and its attachments" : ""} in a short paragraph or two.
+
+### Key ideas
+A bulleted list of the key ideas, questions and claims.
+
+### Connections and next steps
+How this relates to the research context, open questions it raises, and what might be worth reading, making or writing next. Be specific and brief.`;
+}
