@@ -1,21 +1,16 @@
-import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Accounts, type Identity } from "@/lib/accounts";
 import { decryptSecret, encryptSecret, keyHint } from "@/lib/ai/user-config";
-import { GitSync } from "@/lib/content/git";
+import { ContentLock } from "@/lib/content/lock";
+import { migrateToUserFolders } from "@/lib/content/migrate";
 import { ContentStore } from "@/lib/content/store";
 
 let root: string;
 let dir: string;
-let git: GitSync;
-const stores: ContentStore[] = [];
-
-function sh(...args: string[]): string {
-  return execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
-}
+let lock: ContentLock;
 
 const google = (sub: string, email: string, verified = true): Identity => ({
   provider: "google",
@@ -24,47 +19,36 @@ const google = (sub: string, email: string, verified = true): Identity => ({
   emailVerified: verified,
 });
 
-function workspace(id: string, name = id) {
-  const store = new ContentStore({
-    git,
-    repoDir: dir,
-    prefix: `users/${id}`,
-    author: { name, email: `${id}@example.com` },
-    refreshIntervalMs: 0,
-  });
-  stores.push(store);
-  return store;
+function workspace(id: string) {
+  return new ContentStore({ dir: path.join(dir, "users", id), refreshIntervalMs: 0 });
 }
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), "portal-accounts-"));
   dir = path.join(root, "content");
-  git = new GitSync({ dir, branch: "main", pushDelayMs: 60_000, authorName: "Portal", authorEmail: "portal@example.com" });
-  await git.ensureRepo();
+  await fs.mkdir(dir, { recursive: true });
+  lock = new ContentLock(dir);
 });
 
 afterEach(async () => {
-  for (const s of stores.splice(0)) s.dispose();
-  git.dispose();
   await fs.rm(root, { recursive: true, force: true });
 });
 
 describe("accounts", () => {
   it("creates an account on first sign-in and finds it again", async () => {
-    const accounts = new Accounts({ dir, git });
+    const accounts = new Accounts({ dir, lock });
     const a = await accounts.signIn(google("g1", "Ada@Example.com"), { name: "Ada" });
     expect(a).toMatchObject({ name: "Ada", email: "Ada@Example.com" });
     expect(a.id).toMatch(/^u[0-9a-f]{10}$/);
-    expect(await fs.readFile(path.join(dir, "accounts", `${a.id}.md`), "utf8")).toContain("provider: google");
-    expect(sh("log", "-1", "--format=%s")).toBe(`account: create ${a.id}`);
+    expect(await fs.readFile(path.join(dir, "users", a.id, "account.md"), "utf8")).toContain("provider: google");
 
-    const again = await new Accounts({ dir, git }).signIn(google("g1", "ada@example.com"), {});
+    const again = await new Accounts({ dir, lock }).signIn(google("g1", "ada@example.com"), {});
     expect(again.id).toBe(a.id);
     expect(await accounts.list()).toHaveLength(1);
   });
 
   it("links a second provider only by verified email", async () => {
-    const accounts = new Accounts({ dir, git });
+    const accounts = new Accounts({ dir, lock });
     const a = await accounts.signIn(google("g1", "ada@example.com"), { name: "Ada" });
     const ms: Identity = { provider: "microsoft", subject: "m1", email: "ADA@example.com", emailVerified: true };
     const linked = await accounts.signIn(ms, {});
@@ -81,9 +65,8 @@ describe("accounts", () => {
     await fs.mkdir(path.join(dir, "journal", "2026", "10"), { recursive: true });
     await fs.writeFile(path.join(dir, "journal", "2026", "10", "entry.md"), "---\ncreated: 2026-10-09T10:00:00Z\n---\n\nHello\n");
     await fs.writeFile(path.join(dir, "settings.md"), "---\nupdated: 2026-10-09T10:00:00Z\n---\n\nMy PhD\n");
-    await git.exclusive(() => git.commitPaths(["journal", "settings.md"], "old content"));
 
-    const accounts = new Accounts({ dir, git }, "owner@example.com");
+    const accounts = new Accounts({ dir, lock }, "owner@example.com");
     const stranger = await accounts.signIn(google("g2", "someone@example.com"), {});
     expect(await fs.stat(path.join(dir, "settings.md")).catch(() => null)).not.toBeNull(); // not theirs
 
@@ -92,7 +75,6 @@ describe("accounts", () => {
     expect(accounts.isOwner(stranger)).toBe(false);
     expect(await fs.stat(path.join(dir, "settings.md")).catch(() => null)).toBeNull();
     expect(await fs.readFile(path.join(dir, "users", owner.id, "settings.md"), "utf8")).toContain("My PhD");
-    expect(sh("status", "--porcelain")).toBe("");
 
     const store = workspace(owner.id);
     await store.init();
@@ -102,9 +84,9 @@ describe("accounts", () => {
 });
 
 describe("workspaces", () => {
-  it("keeps each user's content in their own folder, committed as them", async () => {
-    const a = workspace("ua", "Ada");
-    const b = workspace("ub", "Bo");
+  it("keeps each user's content in their own folder", async () => {
+    const a = workspace("ua");
+    const b = workspace("ub");
     await a.init();
     await b.init();
     const src = await a.createSource({ title: "Only Ada's" });
@@ -112,8 +94,6 @@ describe("workspaces", () => {
     expect(await fs.stat(path.join(dir, "users", "ua", src.path))).toBeTruthy();
     expect(await b.listSources()).toHaveLength(0);
     expect(await b.getSource(src.id)).toBeNull();
-    expect(sh("log", "-1", "--format=%an <%ae>")).toBe("Ada <ua@example.com>");
-    expect(sh("show", "--name-only", "--format=", "HEAD")).toBe(`users/ua/sources/${src.id}.md`);
   });
 
   it("refuses paths that escape the workspace", async () => {
@@ -123,6 +103,29 @@ describe("workspaces", () => {
     await fs.writeFile(path.join(dir, "users", "ub", "attachments", "secret.pdf"), "x");
     expect(await a.attachmentPath("../ub/attachments/secret.pdf")).toBeNull();
     expect(await a.attachmentPath("attachments/../../ub/attachments/secret.pdf")).toBeNull();
+    // The account file and AI key sit in the same folder but are never served.
+    expect(await a.attachmentPath("account.md")).toBeNull();
+    expect(await a.attachmentPath("ai-key.json")).toBeNull();
+  });
+
+  it("moves the earlier layout into one folder per user, once", async () => {
+    const secrets = path.join(root, "secrets");
+    await fs.mkdir(path.join(dir, "accounts"), { recursive: true });
+    await fs.mkdir(path.join(dir, "users", "ua"), { recursive: true });
+    await fs.writeFile(path.join(dir, "accounts", "ua.md"), "---\nid: ua\nemail: ada@example.com\nname: Ada\n---\n");
+    await fs.mkdir(path.join(secrets, "ai"), { recursive: true });
+    await fs.writeFile(path.join(secrets, "ai", "ua.json"), '{"version":1}');
+
+    const moved = await migrateToUserFolders(dir, secrets);
+    expect(moved).toHaveLength(2);
+    expect(await fs.readFile(path.join(dir, "users", "ua", "account.md"), "utf8")).toContain("Ada");
+    expect(await fs.readFile(path.join(dir, "users", "ua", "ai-key.json"), "utf8")).toBe('{"version":1}');
+    expect((await fs.stat(path.join(dir, "users", "ua", "ai-key.json"))).mode & 0o077).toBe(0);
+    expect(await fs.stat(path.join(dir, "accounts")).catch(() => null)).toBeNull();
+    expect(await fs.stat(secrets).catch(() => null)).toBeNull();
+    expect((await new Accounts({ dir, lock }).get("ua"))?.name).toBe("Ada");
+
+    expect(await migrateToUserFolders(dir, secrets)).toEqual([]); // nothing left to move
   });
 });
 

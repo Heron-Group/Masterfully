@@ -17,17 +17,12 @@ export function serverConfig() {
     production,
     // turbopackIgnore: runtime paths, not files to bundle into the build output.
     contentDir: path.resolve(/*turbopackIgnore: true*/ contentDir),
-    git: {
-      remote: env.CONTENT_GIT_REMOTE?.trim() || undefined,
-      branch: env.CONTENT_GIT_BRANCH?.trim() || "main",
-      sshKeyPath: env.GIT_SSH_KEY_PATH?.trim() || undefined,
-      pushDelayMs: Math.max(1, Number(env.GIT_PUSH_DELAY_SECONDS) || 60) * 1000,
-      authorName: env.GIT_AUTHOR_NAME?.trim() || "Masterfully",
-      authorEmail: env.GIT_AUTHOR_EMAIL?.trim() || "masterfully@localhost",
-    },
     cacheDir: path.resolve(/*turbopackIgnore: true*/ env.CACHE_DIR?.trim() || ".cache"),
-    /** Encrypted per-user secrets (AI API keys). Outside the content repo. */
-    secretsDir: path.resolve(/*turbopackIgnore: true*/ env.SECRETS_DIR?.trim() || ".secrets"),
+    /**
+     * Where AI keys were kept before they moved into each user's folder. Only
+     * read once, to move any keys still there (see lib/content/migrate.ts).
+     */
+    legacySecretsDir: path.resolve(/*turbopackIgnore: true*/ env.SECRETS_DIR?.trim() || ".secrets"),
     /** Your account: gets the pre-multi-user content on first sign-in. */
     ownerEmail: env.OWNER_EMAIL?.trim() || undefined,
     /** Public address of the app, for sign-in redirects (e.g. https://research.example.com). */

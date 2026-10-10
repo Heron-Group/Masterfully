@@ -9,16 +9,15 @@ Anyone can sign up with a **Google or Microsoft account**; each person gets thei
 own private workspace. AI summaries use each person's **own Claude or OpenAI API
 key**, added in Settings.
 
-Everything written is a plain Markdown file with YAML frontmatter, in a content
-folder that is its own Git repository and is pushed to a private GitHub repo.
-There is no database. You can read and edit the files without the app (in
+Everything written is a plain Markdown file with YAML frontmatter, in one folder
+per user on the server. There is no database. You can read and edit the files without the app (in
 Obsidian or any text editor), and the app picks up those edits on the next page
 load.
 
 - [Development](#development)
 - [Configuration](#configuration)
 - [Sign-in with Google and Microsoft](#sign-in-with-google-and-microsoft)
-- [The content repository and backups](#the-content-repository-and-backups)
+- [Where data is kept, and backups](#where-data-is-kept-and-backups)
 - [Deploying on Plesk](#deploying-on-plesk)
 - [Docker fallback](#docker-fallback)
 - [AI summaries and changing the model](#ai-summaries-and-changing-the-model)
@@ -30,7 +29,7 @@ load.
 
 ## Development
 
-Requires Node.js 20.9 or later (22 or 24 recommended) and `git`.
+Requires Node.js 20.9 or later (22 or 24 recommended).
 
 ```bash
 npm install
@@ -76,13 +75,7 @@ All settings are environment variables. `.env.example` lists them with comments.
 | `AUTH_MICROSOFT_TENANT` | no | `common` (default: work, school and personal accounts), `consumers`, `organizations`, or one tenant ID. |
 | `OWNER_EMAIL` | recommended | Your email. When you first sign in with Google or Microsoft using this (verified) address, the content from the single-user version moves into your workspace. |
 | `CONTENT_DIR` | yes (production) | **Absolute** path of the content folder, outside the web root, e.g. `/var/www/vhosts/example.com/research-content`. |
-| `CONTENT_GIT_REMOTE` | recommended | SSH URL of the private GitHub repo, e.g. `git@github.com:you/research-content.git`. Leave empty to keep content local only. |
-| `CONTENT_GIT_BRANCH` | no | Default `main`. |
-| `GIT_SSH_KEY_PATH` | with a remote | Private key of the GitHub deploy key (see below). |
-| `GIT_PUSH_DELAY_SECONDS` | no | Push this long after the last change. Default `60`. |
-| `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL` | no | Name and email on content commits. |
 | `CACHE_DIR` | no | Image thumbnails (safe to delete; rebuilt on demand). Use an absolute path outside the content folder. |
-| `SECRETS_DIR` | yes (production) | Users' encrypted AI API keys. Absolute path outside the content folder and web root. Default `.secrets`. |
 
 ---
 
@@ -115,92 +108,57 @@ to someone else's account by email.)
    `AUTH_MICROSOFT_SECRET`.
 
 Restart the app after changing these. **Privacy:** each user only ever sees
-their own workspace in the app, but whoever runs the server or can read the
-GitHub repository can read everyone's files. Tell your users this.
+their own workspace in the app, but whoever runs the server (or can read its
+backups) can read everyone's files. Tell your users this.
 
-## The content repository and backups
+## Where data is kept, and backups
+
+Everything about a person lives in one folder in `CONTENT_DIR`:
 
 ```
-research-content/
-  accounts/<user id>.md                       one file per account (name, email, sign-ins)
-  users/<user id>/                            each user's private workspace:
-    journal/2026/10/2026-10-09T14-32-05Z.md     one file per entry
-    sources/brody-2025-graphic-language.md      one file per source
-    groups/co-design-foundations.md             one file per reading group
-    notes/workshop-reflections.md               one file per note
+content/
+  users/<user id>/
+    account.md                                 name, email and sign-ins
+    ai-key.json                                encrypted AI key (if they added one)
+    settings.md                                their research context
+    journal/2026/10/2026-10-09T14-32-05Z.md    one file per entry
+    sources/brody-2025-graphic-language.md     one file per source
+    groups/co-design-foundations.md            one file per reading group
+    notes/workshop-reflections.md              one file per note
     attachments/sources/<source id>.pdf
     attachments/journal/<entry id>/<files>
     attachments/notes/<note id>/<files>
-    settings.md                                 their research context
 ```
 
-Content from the single-user version (at the top of the repository) moves into
-the owner's workspace (`OWNER_EMAIL`) the first time they sign in, in one commit.
-Commits are authored as the user who made the change. AI keys are **not** in
-the repository; they are encrypted in `SECRETS_DIR`.
+- **Deleting someone** means deleting their `users/<id>/` folder.
+- **"Download your data"** (Settings) gives a person a zip of their folder,
+  without `account.md` and `ai-key.json`.
+- Changes are written safely: each save goes to a temporary file first, and a
+  change that fails part-way is undone, so files are never left half-written.
+- Files edited directly on the server appear in the app on the next page load.
+  The app never rewrites a file whose frontmatter it can't parse; it shows the
+  problem and asks for it to be fixed in a text editor.
+- The in-memory index is only a cache, rebuilt from the files on restart.
+- The AI key is encrypted with a key derived from `SESSION_SECRET`, and the file
+  is readable only by the app's account.
 
-Users can download everything in their workspace as a zip (Markdown files and
-attachments) from **Settings → Your data**. The app's interface doesn't
-mention Git or show backup status; check backups in the server log or on GitHub.
+### Backups
 
-How the app treats it:
+The app keeps no history of changes and no copy anywhere else, so **set up
+backups of `CONTENT_DIR`**. In Plesk: **Websites & Domains → Backup & Restore →
+Schedule** (or **Tools & Settings → Backup Manager** as an administrator).
+Back up daily, keep at least a couple of weeks, and store them on **remote
+storage** (FTP, S3-compatible or Google Drive) so a server failure doesn't take
+the backups with it. To restore one person's work, restore their `users/<id>/`
+folder from a backup.
 
-- **One commit per change**, with a readable message such as
-  `journal: add entry 2026-10-09 15:32` or `source: update notes brody-2025-graphic-language`.
-- **Push about 60 seconds after the last change.** Push errors are written to
-  the server log (the app's interface doesn't show backup status).
-- Before each push it **pulls with rebase**, so edits you pushed from another
-  computer are picked up. If they conflict with changes on the server, it stops,
-  leaves every file as it was, and lists the conflicting files. Nothing is
-  overwritten.
-- Files edited directly on the server are committed on the next sync or restart.
-- The in-memory index is only a cache. Restarting the app rebuilds it from the
-  files.
-- The app never rewrites a file whose frontmatter it can't parse. It shows the
-  problem and asks you to fix it in a text editor.
-
-### Setting up the GitHub repository (once)
-
-1. On GitHub, create a **private**, empty repository, e.g. `research-content`.
-2. On the server, over SSH, create a deploy key for that repository only:
-
-   ```bash
-   mkdir -p ~/.ssh && chmod 700 ~/.ssh
-   ssh-keygen -t ed25519 -N "" -C "masterfully" -f ~/.ssh/research_content_deploy
-   cat ~/.ssh/research_content_deploy.pub
-   ```
-
-3. In the GitHub repo, open **Settings → Deploy keys → Add deploy key**, paste
-   the public key, and tick **Allow write access**.
-4. Set `CONTENT_GIT_REMOTE=git@github.com:you/research-content.git` and
-   `GIT_SSH_KEY_PATH=/var/www/vhosts/example.com/.ssh/research_content_deploy`
-   (use the real home directory: `echo ~` shows it).
-
-On first start, if `CONTENT_DIR` is empty or missing, the app clones the GitHub
-repo into it (or starts a new repository if the GitHub one is empty). If it
-already has files, it uses them as they are.
-
-### Restoring from the backup
-
-The GitHub repo *is* the backup, with full history. To read it without the app,
-clone it anywhere (`git clone git@github.com:you/research-content.git`) and open
-the folder in Obsidian or a text editor.
-
-- **Move to a new server, or recover a lost folder.** Stop the app, make sure
-  `CONTENT_DIR` points at an empty or missing folder, and start the app. It
-  clones the repo.
-- **Undo a change.** In a clone, find the commit (`git log -- sources/<id>.md`),
-  run `git revert <commit>` or check out an old version of the file, commit and
-  push. The server pulls it in before its next backup (after the next change
-  made in the app).
-- **Corrupted or confusing server copy.** Stop the app, rename the folder
-  (`mv research-content research-content.old`), start the app to get a fresh
-  clone, then delete the old folder once you're happy.
-
-Image thumbnails live in `CACHE_DIR` and are not backed up. They are rebuilt
-from the originals when needed.
-
----
+**Upgrading from the Git-based version:** on first start, the app moves each
+`accounts/<id>.md` into `users/<id>/account.md` and each key from the old
+`SECRETS_DIR` into `users/<id>/ai-key.json` (logged as "moved into user
+folders"). The old `.git` folder and `.gitignore` in `CONTENT_DIR` hold the
+previous version history; once you have a backup you're happy with, you can
+delete them. The `CONTENT_GIT_*`, `GIT_*` and `SECRETS_DIR` variables can be
+removed.
 
 ## Deploying on Plesk
 
@@ -234,7 +192,7 @@ Deploy this (code) repository into the subdomain's folder, e.g.
 
 Under **Custom environment variables**, add the variables from
 [Configuration](#configuration). Use absolute paths for
-`CONTENT_DIR`, `CACHE_DIR` and `GIT_SSH_KEY_PATH`, outside the subdomain's web
+`CONTENT_DIR` and `CACHE_DIR`, outside the subdomain's web
 root.
 
 ### 4. Build
@@ -263,14 +221,13 @@ Additional nginx directives**:
 # Uploads: PDFs and attachments up to 50 MB each.
 client_max_body_size 60m;
 
-# Keep one app process running so the push queue isn't stopped while idle.
+# Keep one app process running so the first visit after a quiet spell is fast.
 passenger_min_instances 1;
 ```
 
 The app is designed for a single process. It still behaves correctly if
-Passenger starts more than one, because Git work is serialised with a file lock
-and every read checks the files for changes. If Passenger stops the app before a
-pending push runs, the push happens when it next starts.
+Passenger starts more than one, because writes take a file lock and every read
+checks the files for changes.
 
 ### 6. Updating
 
@@ -287,29 +244,27 @@ in the code folder.
 
 - Open `https://research.example.com`. You should see the sign-in page with
   the Google and Microsoft buttons.
-- Sign in, post a journal entry, and within about a minute it appears in the
-  GitHub repo.
+- Sign in and post a journal entry; it appears as a file in your folder in
+  `CONTENT_DIR/users/`.
 - Signed out, `https://research.example.com/api/journal` returns 401.
 
 ---
 
 ## Docker fallback
 
-For Plesk's Docker extension or any container host. The image includes `git` and
-`ssh`; content and caches live in the `/data` volume.
+For Plesk's Docker extension or any container host. Content and caches live in
+the `/data` volume; back it up.
 
 ```bash
 docker build -t masterfully .
 docker run -d --name research -p 3000:3000 \
   -v research-data:/data \
-  -v ~/.ssh/research_content_deploy:/keys/deploy:ro \
-  -e GIT_SSH_KEY_PATH=/keys/deploy \
   --env-file .env.production \
   masterfully
 ```
 
-`CONTENT_DIR` (`/data/content`), `CACHE_DIR` (`/data/cache`) and `SECRETS_DIR`
-(`/data/secrets`) are set in the image. Put HTTPS in front of it (Plesk's Docker proxy rules, or any reverse
+`CONTENT_DIR` (`/data/content`) and `CACHE_DIR` (`/data/cache`) are set in the
+image. Put HTTPS in front of it (Plesk's Docker proxy rules, or any reverse
 proxy) and allow request bodies of at least 60 MB.
 
 ---
@@ -337,7 +292,7 @@ and a failed call changes nothing.
 **Each user brings their own key.** In **Settings → AI summaries**, choose
 Claude or OpenAI and paste an API key. It is checked with the provider (a free
 request), encrypted with AES-256-GCM under a key derived from `SESSION_SECRET`,
-and stored in `SECRETS_DIR`; only a hint (`sk-ant-…a1b2`) is ever shown again.
+and stored in the user's folder (`ai-key.json`); only a hint (`sk-ant-…a1b2`) is ever shown again.
 Calls are billed to that user's account. Without a key, the summary buttons
 explain what to do.
 
@@ -354,7 +309,7 @@ filters is retried on another.
 ## Tests
 
 ```bash
-npm test             # unit tests: storage, workspaces, accounts, frontmatter, Git sync, auth, key encryption, AI flow
+npm test             # unit tests: storage, workspaces, accounts, frontmatter, undo on failure, auth, key encryption, AI flow
 npm run typecheck
 npm run lint
 npm run test:e2e     # browser tests against the dev server
@@ -369,7 +324,7 @@ check, among other things:
 
 - the journal opens at the newest entry with no scroll movement;
 - older entries load without moving the view;
-- a 40 MB PDF uploads, is served and is committed;
+- a 40 MB PDF uploads, is served and is saved in the right folder;
 - a pasted screenshot and a PDF attach to one entry;
 - regenerating a summary changes only the `## AI summary` section;
 - nothing is reachable signed out;
@@ -385,7 +340,7 @@ the tests at it, e.g. `E2E_PORT=3200 E2E_CONTENT_DIR=/path/to/content npx playwr
 
 | Path | Role |
 | --- | --- |
-| [lib/content/](lib/content/) | **The only code that touches the content folder and Git**: tolerant parsing, safe section rewrites, the index, one commit per write with rollback, debounced push with rebase and conflict stop. Moving to another backend later (e.g. the GitHub API) is contained here. |
+| [lib/content/](lib/content/) | **The only code that touches users' files**: tolerant parsing, safe section rewrites, the index, atomic writes with undo on failure, a file lock, and the one-off move from the old layout ([migrate.ts](lib/content/migrate.ts)). Moving to another backend later (e.g. a database) is contained here. |
 | [lib/auth/](lib/auth/) | Google and Microsoft sign-in (OAuth with PKCE), the only way to sign in or sign up, and a signed 30-day HTTP-only cookie holding the user id. |
 | [lib/accounts.ts](lib/accounts.ts) | Accounts (`accounts/<id>.md`), linking sign-ins by verified email, and moving single-user content into the owner's workspace. |
 | [proxy.ts](proxy.ts) | Redirects signed-out requests. Pages, server actions and API routes also check the session themselves. Upload routes skip the proxy (it would cut large bodies off at 10 MB). |
@@ -402,15 +357,6 @@ sources (IDs are stable filenames).
 ---
 
 ## Troubleshooting
-
-**`[backup] push to GitHub failed` in the server log, with conflicting files.** Something changed the same file on GitHub
-and on the server. Over SSH: `cd $CONTENT_DIR && git status`, then
-`git pull --rebase`, fix the listed files, `git add` them and
-`git rebase --continue`. The app pushes again after the next change.
-
-**`[backup] push to GitHub failed` with a permission or host-key error.** Check the deploy key
-has write access and `GIT_SSH_KEY_PATH` is right. Test with
-`GIT_SSH_COMMAND="ssh -i $GIT_SSH_KEY_PATH" git -C $CONTENT_DIR push`.
 
 **Uploads fail with "too large".** Add `client_max_body_size 60m;` to the
 nginx directives (step 5). The app's own limit is 50 MB per file.

@@ -1,21 +1,24 @@
-import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { OWNER_EMAIL } from "./helpers";
 
-/** The content repository. */
+/** The content folder (one folder per user in users/). */
 export const REPO_DIR = path.resolve(process.env.E2E_CONTENT_DIR ?? ".dev-content");
 
 /** Account id for an email address (the owner by default; see global-setup). */
 export function ownerId(email = OWNER_EMAIL): string {
-  const dir = path.join(REPO_DIR, "accounts");
-  const file = readdirSync(dir).find((f) =>
-    readFileSync(path.join(dir, f), "utf8").toLowerCase().includes(`email: ${email.toLowerCase()}`),
-  );
-  if (!file) throw new Error(`No account for ${email} yet: sign in first.`);
-  return file.slice(0, -3);
+  const users = path.join(REPO_DIR, "users");
+  const id = readdirSync(users).find((u) => {
+    const file = path.join(users, u, "account.md");
+    return existsSync(file) && readFileSync(file, "utf8").toLowerCase().includes(`email: ${email.toLowerCase()}`);
+  });
+  if (!id) throw new Error(`No account for ${email} yet: sign in first.`);
+  return id;
 }
+
+/** Whether a file exists in the owner's folder. */
+export const ownerHas = (rel: string) => existsSync(workspace(rel));
 
 /** The owner's workspace folder, where the specs read and write. */
 export const workspace = (rel = "") => path.join(REPO_DIR, "users", ownerId(), rel);
@@ -44,27 +47,15 @@ export function makePdf(bytes = 2000, text = "Test PDF"): Buffer {
   return Buffer.from(out);
 }
 
-/** Git in the content repo, with the owner's `users/<id>/` prefix removed from paths in the output. */
-export function git(...args: string[]): string {
-  const out = execFileSync("git", args, { cwd: REPO_DIR, encoding: "utf8" }).trim();
-  return out.split(`users/${ownerId()}/`).join("");
-}
-
 /** Write a file into the content folder as if edited by hand. */
 export function handWrite(rel: string, text: string) {
   mkdirSync(path.dirname(workspace(rel)), { recursive: true });
   writeFileSync(workspace(rel), text);
 }
 
-/** Remove a hand-written file and commit, leaving the content repo clean. */
+/** Remove a hand-written file. */
 export function handRemove(rel: string) {
   rmSync(workspace(rel), { force: true });
-  try {
-    git("rm", "-q", "--cached", "--ignore-unmatch", "--", `users/${ownerId()}/${rel}`);
-    git("-c", "user.name=E2E", "-c", "user.email=e2e@localhost", "commit", "-q", "-m", `e2e: remove ${rel}`);
-  } catch {
-    // Nothing to commit (the file was never committed).
-  }
 }
 
 /**

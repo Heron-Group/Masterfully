@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { journalIdFor, sourceSlug } from "@/lib/content/ids";
 import {
-  formatCommitTime,
   formatDayHeading,
   formatTime,
   londonDateKey,
@@ -13,7 +12,6 @@ describe("Europe/London display", () => {
     expect(formatDayHeading("2026-10-09T14:32:05Z")).toBe("Friday 9 October 2026");
     expect(formatTime("2026-10-09T14:32:05Z")).toBe("15:32");
     expect(formatTime("2026-12-01T14:32:05Z")).toBe("14:32");
-    expect(formatCommitTime("2026-10-09T14:32:05Z")).toBe("2026-10-09 15:32");
   });
 
   it("puts late-night UTC times on the right London day", () => {

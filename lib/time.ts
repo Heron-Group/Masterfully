@@ -47,12 +47,6 @@ export function londonDateKey(iso: string): string {
   return p.year ? `${p.year}-${p.month}-${p.day}` : "";
 }
 
-/** "2026-10-09 15:32" in London time, for commit messages. */
-export function formatCommitTime(iso: string): string {
-  const key = londonDateKey(iso);
-  return key ? `${key} ${formatTime(iso)}` : iso;
-}
-
 /**
  * The UTC instant at which a London calendar day starts, e.g. for jumping
  * to a date chosen in a date picker. `day` is "YYYY-MM-DD".

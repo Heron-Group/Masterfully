@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,24 +7,34 @@ import { ContentStore, type StoreOptions } from "@/lib/content/store";
 let root: string;
 let dir: string;
 let clock: Date;
-const stores: ContentStore[] = [];
 
-function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+/** Every file in the folder (relative paths), leaving out the app's own .tmp and .lock. */
+async function files(): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(rel: string) {
+    for (const e of await fs.readdir(path.join(dir, rel), { withFileTypes: true })) {
+      if (!rel && e.name.startsWith(".")) continue;
+      const child = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) await walk(child);
+      else out.push(child);
+    }
+  }
+  await walk("");
+  return out.sort();
+}
+
+/** Leftover temporary files or undo copies (there should be none after a change). */
+async function scratch(): Promise<string[]> {
+  return fs.readdir(path.join(dir, ".tmp")).catch(() => []);
 }
 
 async function makeStore(overrides: Partial<StoreOptions> = {}): Promise<ContentStore> {
   const store = new ContentStore({
     dir,
-    branch: "main",
-    pushDelayMs: 60_000,
-    authorName: "Test",
-    authorEmail: "test@example.com",
     refreshIntervalMs: 0,
     now: () => clock,
     ...overrides,
   });
-  stores.push(store);
   await store.init();
   return store;
 }
@@ -41,56 +50,33 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  for (const s of stores.splice(0)) s.dispose();
   await fs.rm(root, { recursive: true, force: true });
 });
 
 describe("initialisation", () => {
-  it("creates a repo with settings.md in an empty folder", async () => {
-    const store = await makeStore();
+  it("creates settings.md in an empty folder", async () => {
+    await makeStore();
     expect(await fs.readFile(path.join(dir, "settings.md"), "utf8")).toContain("updated:");
-    expect(await store.git.commitCount()).toBe(1);
-    expect(store.syncStatus().state).toBe("local");
+    expect(await files()).toEqual(["settings.md"]);
   });
 
-  it("clones from the remote when the folder is empty", async () => {
-    const remote = path.join(root, "remote.git");
-    git(root, "init", "--bare", "--initial-branch=main", remote);
-    const seed = path.join(root, "seed");
-    git(root, "clone", remote, seed);
-    await fs.mkdir(path.join(seed, "sources"));
-    await fs.writeFile(path.join(seed, "sources", "a.md"), "---\ntitle: From GitHub\n---\n");
-    git(seed, "add", "-A");
-    git(seed, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-m", "seed");
-    git(seed, "push", "origin", "main");
-
-    const store = await makeStore({ remote });
-    expect((await store.getSource("a"))?.title).toBe("From GitHub");
-  });
-
-  it("commits files that were already in the folder", async () => {
+  it("uses files that were already in the folder", async () => {
     await fs.mkdir(path.join(dir, "groups"), { recursive: true });
     await fs.writeFile(path.join(dir, "groups", "g.md"), "---\ntitle: G\n---\n");
     const store = await makeStore();
-    expect(git(dir, "status", "--porcelain")).toBe("");
     expect((await store.getGroup("g"))?.title).toBe("G");
   });
 });
 
 describe("journal", () => {
-  it("posting creates exactly one .md file and one commit", async () => {
+  it("posting creates exactly one .md file", async () => {
     const store = await makeStore();
-    const before = await store.git.commitCount();
     const entry = await store.createJournalEntry({ body: "First thought" });
 
     expect(entry.id).toBe("2026-10-09T14-32-05Z");
     expect(entry.path).toBe("journal/2026/10/2026-10-09T14-32-05Z.md");
-    expect(await store.git.commitCount()).toBe(before + 1);
-    expect(git(dir, "show", "--name-only", "--format=%s", "HEAD").split("\n").filter(Boolean)).toEqual([
-      "journal: add entry 2026-10-09 15:32",
-      "journal/2026/10/2026-10-09T14-32-05Z.md",
-    ]);
-    expect(git(dir, "status", "--porcelain")).toBe("");
+    expect(await files()).toEqual(["journal/2026/10/2026-10-09T14-32-05Z.md", "settings.md"]);
+    expect(await scratch()).toEqual([]);
   });
 
   it("gives entries in the same second distinct ids", async () => {
@@ -128,7 +114,7 @@ describe("journal", () => {
     const edited = await store.updateJournalEntry(entry.id, { body: "final" });
     expect(edited.created).toBe("2026-10-09T14:32:05Z");
     expect(edited.updated).toBe("2026-10-09T14:34:05Z");
-    expect(git(dir, "log", "-1", "--format=%s")).toBe("journal: edit entry 2026-10-09 15:32");
+    expect(await fs.readFile(path.join(dir, entry.path), "utf8")).toContain("final");
   });
 
   it("stores attachments and deletes them with the entry", async () => {
@@ -146,13 +132,13 @@ describe("journal", () => {
         size: 10,
       },
     ]);
-    const files = git(dir, "show", "--name-only", "--format=", "HEAD").split("\n").sort();
-    expect(files).toEqual([`attachments/journal/${entry.id}/screen-shot.png`, entry.path].sort());
+    expect(await files()).toEqual([`attachments/journal/${entry.id}/screen-shot.png`, entry.path, "settings.md"].sort());
 
     await store.deleteJournalEntry(entry.id);
     await expect(fs.stat(path.join(dir, "attachments"))).rejects.toThrow();
     expect(await store.getJournalEntry(entry.id)).toBeNull();
-    expect(git(dir, "status", "--porcelain")).toBe("");
+    expect(await files()).toEqual(["settings.md"]);
+    expect(await scratch()).toEqual([]);
   });
 
   it("adds and removes attachments when editing", async () => {
@@ -248,16 +234,14 @@ describe("sources and groups", () => {
     expect((await store.createSource({ title: "New" })).id).toBe("new-2");
   });
 
-  it("adds a new source to groups and stores a PDF in one commit", async () => {
+  it("adds a new source to groups and stores its PDF", async () => {
     const store = await makeStore();
     await store.createGroup({ title: "Methods" });
     const pdf = await store.stageUpload(Buffer.from("%PDF-1.7"));
-    const before = await store.git.commitCount();
     const s = await store.createSource(
       { title: "Paper", notes: "Notes here" },
       { pdf: { ...pdf, name: "p.pdf", type: "application/pdf" }, groups: ["methods"] },
     );
-    expect(await store.git.commitCount()).toBe(before + 1);
     expect(s.pdf).toBe(`attachments/sources/${s.id}.pdf`);
     expect((await store.getGroup("methods"))?.sources).toEqual([{ id: s.id, note: "" }]);
     expect((await store.getSource(s.id))?.notes).toBe("Notes here");
@@ -276,7 +260,7 @@ describe("sources and groups", () => {
     expect((await store.getGroup("one"))?.sources).toEqual([]);
     expect((await store.getGroup("two"))?.sources).toEqual([]);
     await expect(fs.stat(path.join(dir, s.pdf!))).rejects.toThrow();
-    expect(git(dir, "status", "--porcelain")).toBe("");
+    expect(await files()).toEqual(["groups/one.md", "groups/two.md", "settings.md"]);
   });
 
   it("deleting a group never deletes its sources", async () => {
@@ -375,16 +359,14 @@ describe("sources and groups", () => {
 });
 
 describe("notes", () => {
-  it("creates a note with attachments in one commit, edits it, and deletes it", async () => {
+  it("creates a note with attachments, edits it, and deletes it", async () => {
     const store = await makeStore();
     const img = await store.stageUpload(Buffer.from("fake image"));
-    const before = await store.git.commitCount();
     const note = await store.createNote({
       title: "Workshop reflections",
       text: "Seven people, two hours.",
       attachments: [{ ...img, name: "map.jpg", type: "image/jpeg" }],
     });
-    expect(await store.git.commitCount()).toBe(before + 1);
     expect(note.id).toBe("workshop-reflections");
     expect(note.attachments).toEqual([
       { file: "attachments/notes/workshop-reflections/map.jpg", name: "map.jpg", type: "image/jpeg", size: 10 },
@@ -408,7 +390,8 @@ describe("notes", () => {
     await store.deleteNote(note.id);
     expect(await store.getNote(note.id)).toBeNull();
     expect(await fs.stat(path.join(dir, "attachments/notes/workshop-reflections")).catch(() => null)).toBeNull();
-    expect(git(dir, "status", "--porcelain")).toBe("");
+    expect(await files()).toEqual(["notes/new-2.md", "settings.md"]);
+    expect(await scratch()).toEqual([]);
   });
 
   it("reads a hand-written note without headings as its text", async () => {
@@ -438,7 +421,7 @@ describe("rollback", () => {
     await store.createGroup({ title: "G" });
     const s = await store.createSource({ title: "A" }, { groups: ["g"] });
     const groupFile = await fs.readFile(path.join(dir, "groups/g.md"), "utf8");
-    const head = await store.git.headCommit();
+    const before = await files();
 
     // deleteSource rewrites the group first, then fails removing the source.
     const realRm = fs.rm;
@@ -452,71 +435,28 @@ describe("rollback", () => {
       spy.mockRestore();
     }
     expect(await fs.readFile(path.join(dir, "groups/g.md"), "utf8")).toBe(groupFile);
-    expect(await store.git.headCommit()).toBe(head);
-    expect(git(dir, "status", "--porcelain")).toBe("");
+    expect(await files()).toEqual(before);
     expect((await store.getGroup("g"))?.sources).toHaveLength(1);
   });
-});
 
-describe("sync", () => {
-  async function withRemote() {
-    const remote = path.join(root, "remote.git");
-    git(root, "init", "--bare", "--initial-branch=main", remote);
-    const store = await makeStore({ remote, pushDelayMs: 50 });
-    return { remote, store };
-  }
+  it("brings back a removed folder when a delete fails part-way", async () => {
+    const store = await makeStore();
+    const img = await store.stageUpload(Buffer.from("fake image"));
+    const note = await store.createNote({ title: "Kept", attachments: [{ ...img, name: "a.jpg", type: "image/jpeg" }] });
+    const before = await files();
 
-  it("pushes after the debounce delay", async () => {
-    const { remote, store } = await withRemote();
-    await store.createJournalEntry({ body: "to GitHub" });
-    expect(["pending", "syncing"]).toContain(store.syncStatus().state);
-    await waitFor(() => store.syncStatus().state === "synced");
-    expect(git(remote, "log", "-1", "--format=%s", "main")).toBe("journal: add entry 2026-10-09 15:32");
-  });
-
-  it("rebases onto remote changes before pushing", async () => {
-    const { remote, store } = await withRemote();
-    await store.syncNow();
-    const other = path.join(root, "other");
-    git(root, "clone", remote, other);
-    await fs.mkdir(path.join(other, "sources"), { recursive: true });
-    await fs.writeFile(path.join(other, "sources", "elsewhere.md"), "---\ntitle: Elsewhere\n---\n");
-    git(other, "add", "-A");
-    git(other, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-m", "edit elsewhere");
-    git(other, "push", "origin", "main");
-
-    await store.createJournalEntry({ body: "local" });
-    const status = await store.syncNow();
-    expect(status.state).toBe("synced");
-    expect((await store.getSource("elsewhere"))?.title).toBe("Elsewhere");
-    expect(git(remote, "log", "--format=%s", "main").split("\n")).toContain("edit elsewhere");
-  });
-
-  it("stops on a conflict without overwriting anything", async () => {
-    const { remote, store } = await withRemote();
-    await store.setResearchContext("Original");
-    await store.syncNow();
-
-    const other = path.join(root, "other");
-    git(root, "clone", remote, other);
-    await fs.writeFile(path.join(other, "settings.md"), "---\n---\nRemote version\n");
-    git(other, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-am", "remote edit");
-    git(other, "push", "origin", "main");
-
-    await store.setResearchContext("Local version");
-    const status = await store.syncNow();
-    expect(status.state).toBe("error");
-    expect(status.conflicts).toEqual(["settings.md"]);
-    expect((await store.getSettings()).researchContext).toBe("Local version");
-    expect(git(dir, "status", "--porcelain")).toBe("");
-    expect(git(remote, "log", "-1", "--format=%s", "main")).toBe("remote edit");
+    // deleteNote removes the note and its attachment, then fails on the folder.
+    const realRm = fs.rm;
+    const spy = vi.spyOn(fs, "rm").mockImplementation(async (p, opts) => {
+      if (String(p).endsWith(`attachments/notes/${note.id}`)) throw new Error("disk on fire");
+      return realRm(p, opts);
+    });
+    try {
+      await expect(store.deleteNote(note.id)).rejects.toThrow("disk on fire");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await files()).toEqual(before);
+    expect((await store.getNote(note.id))?.attachments).toHaveLength(1);
   });
 });
-
-async function waitFor(check: () => boolean, timeoutMs = 10_000) {
-  const start = Date.now();
-  while (!check()) {
-    if (Date.now() - start > timeoutMs) throw new Error("timed out");
-    await new Promise((r) => setTimeout(r, 25));
-  }
-}

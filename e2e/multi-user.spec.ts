@@ -1,7 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { REPO_DIR } from "./fixtures";
+import { ownerId, REPO_DIR } from "./fixtures";
 import { waitForHydration } from "./helpers";
 
 // Uses the development sign-in (AUTH_DEV_LOGIN=1 in .env.local) to act as
@@ -15,11 +15,7 @@ async function signInAs(page: Page, email: string, next = "/library") {
   await waitForHydration(page);
 }
 
-function accountId(email: string): string {
-  const dir = path.join(REPO_DIR, "accounts");
-  const file = readdirSync(dir).find((f) => readFileSync(path.join(dir, f), "utf8").includes(`email: ${email}`));
-  return file!.slice(0, -3);
-}
+const accountId = (email: string) => ownerId(email);
 
 async function userPage(browser: Browser, email: string, next?: string) {
   const page = await (await browser.newContext()).newPage();
@@ -75,7 +71,7 @@ test("AI provider and API key in Settings", async ({ page }) => {
   await page.getByLabel("OpenAI API key").fill("sk-proj-test-secret-9876");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByTestId("key-hint")).toHaveText("sk-proj-…9876");
-  const secretFile = path.resolve(".secrets", "ai", `${accountId(email)}.json`);
+  const secretFile = path.join(REPO_DIR, "users", accountId(email), "ai-key.json");
   const stored = readFileSync(secretFile, "utf8");
   expect(stored).not.toContain("secret-9876");
   expect(JSON.parse(stored).provider).toBe("openai");
@@ -125,4 +121,7 @@ test("Settings sits at the bottom of the sidebar; data downloads as a zip", asyn
   const zip = readFileSync((await download.path())!);
   expect(zip.subarray(0, 2).toString()).toBe("PK");
   expect(zip.includes(Buffer.from("settings.md"))).toBe(true);
+  // The account record and the (encrypted) API key stay on the server.
+  expect(zip.includes(Buffer.from("account.md"))).toBe(false);
+  expect(zip.includes(Buffer.from("ai-key.json"))).toBe(false);
 });

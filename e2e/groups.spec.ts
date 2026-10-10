@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { workspace, git } from "./fixtures";
+import { ownerHas, workspace } from "./fixtures";
 import { readFileSync } from "node:fs";
 import { signIn } from "./helpers";
 
@@ -113,7 +113,6 @@ test("group note, expandable source notes and overview are saved separately", as
   await page.getByRole("textbox", { name: "My overview" }).fill("Methods texts for chapter 3.");
   await expect(page.getByText("Saved", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
   await expect.poll(groupFile).toContain("## Overview\n\nMethods texts for chapter 3.");
-  expect(git("log", "-5", "--format=%s").split("\n").some((m) => m.startsWith("group: update overview "))).toBe(true);
 });
 
 test("rename the group without renaming the file", async ({ page }) => {
@@ -138,7 +137,6 @@ test("deleting a group keeps its sources", async ({ page }) => {
   await page.getByRole("button", { name: "Delete group", exact: true }).click();
   await page.waitForURL("**/groups");
   await expect(page.getByRole("link", { name: new RegExp(TITLE) })).toHaveCount(0);
-  const files = git("show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean);
-  expect(files).toEqual([`groups/${groupUrl.split("/").pop()}.md`]);
+  expect(ownerHas(`groups/${groupUrl.split("/").pop()}.md`)).toBe(false);
   groupUrl = "";
 });

@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 // Development only: fill ./.dev-content (or CONTENT_DIR) with sample journal
-// entries spread over several weeks, then commit them in the content repo.
+// entries spread over several weeks.
 // Usage: node scripts/seed-dev-content.mjs [count] [--library] [--user=email]
 //   --library also adds a few sample sources and a reading group.
 //   --user picks whose workspace to fill; by default OWNER_EMAIL's (read
 //   from .env.local), or the repository root before the owner has signed in
 //   (moved into their workspace on first sign-in).
-import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const repo = path.resolve(process.env.CONTENT_DIR || ".dev-content");
-if (!existsSync(path.join(repo, ".git"))) {
-  console.error(`${repo} is not an initialised content repo. Start the app once first.`);
+if (!existsSync(path.join(repo, "users"))) {
+  console.error(`${repo} has no users folder yet. Start the app once first.`);
   process.exit(1);
 }
 const envOwner = existsSync(".env.local")
@@ -20,11 +19,11 @@ const envOwner = existsSync(".env.local")
   : undefined;
 const userArg = process.argv.find((a) => a.startsWith("--user="))?.slice(7).toLowerCase();
 const user = userArg ?? (process.env.OWNER_EMAIL || envOwner)?.toLowerCase();
-const accountsDir = path.join(repo, "accounts");
-const accounts = existsSync(accountsDir)
-  ? readdirSync(accountsDir)
-      .filter((f) => f.endsWith(".md"))
-      .map((f) => ({ id: f.slice(0, -3), text: readFileSync(path.join(accountsDir, f), "utf8") }))
+const usersDir = path.join(repo, "users");
+const accounts = existsSync(usersDir)
+  ? readdirSync(usersDir)
+      .filter((id) => existsSync(path.join(usersDir, id, "account.md")))
+      .map((id) => ({ id, text: readFileSync(path.join(usersDir, id, "account.md"), "utf8") }))
   : [];
 const target = user ? accounts.find((a) => a.text.toLowerCase().includes(`email: ${user}`)) : undefined;
 if (userArg && !target) {
@@ -75,6 +74,4 @@ if (withLibrary) {
     `---\nid: co-design-foundations\ntitle: "Co-design foundations"\ncreated: ${added.toISOString().replace(/\.\d{3}Z$/, "Z")}\nupdated: ${added.toISOString().replace(/\.\d{3}Z$/, "Z")}\nsources:\n  - id: sanders-2008-co-creation-new\n    note: "The vocabulary I keep returning to"\n  - id: ehn-2008-participation-design-things\n    note: "Infrastructuring and design Things"\n  - id: schon-1983-reflective-practitioner\n---\n## Overview\n\nFoundational texts on participation and co-design that frame the methods chapter.\n`,
   );
 }
-execFileSync("git", ["add", "-A", "--", dir], { cwd: repo });
-execFileSync("git", ["-c", "user.name=Seed", "-c", "user.email=seed@localhost", "commit", "-q", "-m", `dev: seed ${count} sample journal entries${withLibrary ? " and a sample library" : ""}`], { cwd: repo });
 console.log(`Seeded ${count} journal entries${withLibrary ? " and a sample library" : ""} in ${dir}`);

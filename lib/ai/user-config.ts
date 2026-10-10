@@ -2,13 +2,16 @@ import "server-only";
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { AI_KEY_FILE, USERS_DIR } from "../accounts";
 import { serverConfig } from "../config";
+import { writeAtomicFile } from "../content/atomic";
 
 /**
- * Each user's AI provider settings and API keys. Kept outside the content
- * repository (in SECRETS_DIR) so keys never reach Git or GitHub, and
+ * Each user's AI provider settings and API keys, in their own folder
+ * (users/<id>/ai-key.json, readable only by the app's account). Keys are
  * encrypted with AES-256-GCM under a key derived from SESSION_SECRET, so a
- * copy of the folder alone is not enough to read them.
+ * copy of the folder alone is not enough to read them, and they are never
+ * included in the user's data download.
  *
  * Changing SESSION_SECRET makes saved keys unreadable; users then add their
  * key again.
@@ -80,9 +83,9 @@ export function keyHint(key: string): string {
   return `${prefix}…${k.slice(-4)}`;
 }
 
-function filePath(userId: string, dir = serverConfig().secretsDir): string {
+function filePath(userId: string, dir = serverConfig().contentDir): string {
   if (!/^[A-Za-z0-9_-]+$/.test(userId)) throw new Error("Invalid user id");
-  return path.join(dir, "ai", `${userId}.json`);
+  return path.join(dir, USERS_DIR, userId, AI_KEY_FILE);
 }
 
 const empty = (): StoredConfig => ({ version: 1, provider: null, models: {}, keys: {} });
@@ -99,11 +102,7 @@ async function read(userId: string): Promise<StoredConfig> {
 }
 
 async function write(userId: string, config: StoredConfig): Promise<void> {
-  const file = filePath(userId);
-  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  const tmp = `${file}.${randomBytes(4).toString("hex")}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(config, null, 2), { mode: 0o600 });
-  await fs.rename(tmp, file);
+  await writeAtomicFile(filePath(userId), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
 export async function getAiSettings(userId: string): Promise<AiSettingsView> {

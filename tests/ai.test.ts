@@ -66,10 +66,6 @@ describe("summaries (simulated API)", () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), "portal-ai-"));
     store = new ContentStore({
       dir: path.join(root, "content"),
-      branch: "main",
-      pushDelayMs: 60_000,
-      authorName: "Test",
-      authorEmail: "t@example.com",
       refreshIntervalMs: 0,
     });
     await store.init();
@@ -77,7 +73,6 @@ describe("summaries (simulated API)", () => {
 
   afterEach(async () => {
     delete process.env.AI_FAKE;
-    store.dispose();
     await fs.rm(root, { recursive: true, force: true });
   });
 

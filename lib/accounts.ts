@@ -3,12 +3,14 @@ import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { isoDate, optStr, parseFile, record, str, stringifyFile, toIso } from "./content/frontmatter";
-import type { GitSync } from "./content/git";
+import type { ContentLock } from "./content/lock";
+import { writeAtomicFile } from "./content/atomic";
 
 /**
- * User accounts, stored as small Markdown files in the content repository
- * (accounts/<id>.md) so they are versioned and backed up like everything
- * else. Each account owns a private workspace folder, users/<id>/.
+ * User accounts. Everything about a person lives in one folder,
+ * users/<id>/: their account file (account.md: name, email, sign-ins), their
+ * encrypted AI key (ai-key.json) and their content. Deleting that folder
+ * removes the person entirely.
  */
 
 export type Identity = {
@@ -26,16 +28,19 @@ export type Account = {
   identities: Identity[];
 };
 
-export type Repo = { dir: string; git: GitSync };
+export type Repo = { dir: string; lock: ContentLock };
 
-const ACCOUNTS_DIR = "accounts";
 export const USERS_DIR = "users";
+/** In each user's folder; never part of their content or their data download. */
+export const ACCOUNT_FILE = "account.md";
+/** The user's encrypted AI key and provider settings (see lib/ai/user-config.ts). */
+export const AI_KEY_FILE = "ai-key.json";
 
 /** Content from the single-user version, at the repository root. */
 const LEGACY_PATHS = ["journal", "sources", "groups", "attachments", "settings.md"];
 
 function accountPath(id: string) {
-  return `${ACCOUNTS_DIR}/${id}.md`;
+  return `${USERS_DIR}/${id}/${ACCOUNT_FILE}`;
 }
 
 function newId() {
@@ -95,12 +100,10 @@ export class Accounts {
   private async load(force = false): Promise<void> {
     if (this.loaded && !force) return;
     this.byId.clear();
-    const dir = path.join(this.repo.dir, ACCOUNTS_DIR);
-    const files = await fs.readdir(dir).catch(() => [] as string[]);
-    for (const f of files) {
-      if (!f.endsWith(".md")) continue;
-      const id = f.slice(0, -3);
-      const account = parseAccount(await fs.readFile(path.join(dir, f), "utf8"), id);
+    const users = path.join(this.repo.dir, USERS_DIR);
+    for (const id of await fs.readdir(users).catch(() => [] as string[])) {
+      const raw = await fs.readFile(path.join(users, id, ACCOUNT_FILE), "utf8").catch(() => null);
+      const account = raw === null ? null : parseAccount(raw, id);
       if (account) this.byId.set(id, account);
     }
     this.loaded = true;
@@ -127,7 +130,7 @@ export class Accounts {
    * only when both sides have the same *verified* email address.
    */
   async signIn(identity: Identity, profile: { name?: string }): Promise<Account> {
-    return this.repo.git.exclusive(async () => {
+    return this.repo.lock.exclusive(async () => {
       await this.load(true);
       const all = [...this.byId.values()];
       let account =
@@ -151,10 +154,7 @@ export class Accounts {
         changed = true;
       }
       if (changed) {
-        const rel = accountPath(account.id);
-        await fs.mkdir(path.join(this.repo.dir, ACCOUNTS_DIR), { recursive: true });
-        await fs.writeFile(path.join(this.repo.dir, rel), serializeAccount(account));
-        await this.repo.git.commitPaths([rel], `account: ${changed && account.identities.length === 1 ? "create" : "link sign-in for"} ${account.id}`);
+        await writeAtomicFile(path.join(this.repo.dir, accountPath(account.id)), serializeAccount(account));
         this.byId.set(account.id, account);
       }
       if (this.isOwner(account)) await this.adoptLegacyContent(account);
@@ -164,8 +164,8 @@ export class Accounts {
 
   /**
    * The single-user version kept content at the repository root. The first
-   * time the owner signs in, move it into their workspace in one commit.
-   * Must run inside git.exclusive().
+   * time the owner signs in, move it into their folder.
+   * Must run inside lock.exclusive().
    */
   private async adoptLegacyContent(owner: Account): Promise<void> {
     const target = path.join(this.repo.dir, USERS_DIR, owner.id);
@@ -176,11 +176,6 @@ export class Accounts {
     if (!legacy.length) return;
     if (await fs.stat(path.join(target, "settings.md")).catch(() => null)) return; // already has a workspace
     await fs.mkdir(target, { recursive: true });
-    const touched: string[] = [];
-    for (const p of legacy) {
-      await fs.rename(path.join(this.repo.dir, p), path.join(target, p));
-      touched.push(p, `${USERS_DIR}/${owner.id}/${p}`);
-    }
-    await this.repo.git.commitPaths(touched, `content: move existing content into ${owner.name || owner.id}'s workspace`);
+    for (const p of legacy) await fs.rename(path.join(this.repo.dir, p), path.join(target, p));
   }
 }

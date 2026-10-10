@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { workspace, git, handRemove, handWrite, pdfFile } from "./fixtures";
+import { handRemove, handWrite, ownerHas, pdfFile, workspace } from "./fixtures";
 
 /** Add the open source to a group with the tag list. */
 async function addToGroup(page: import("@playwright/test").Page, name: string) {
@@ -91,10 +91,9 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   // The web-page reader serves third-party HTML, so it must be sandboxed.
   const reader = await page.request.get(`/api/reader/${id}`);
   expect(reader.headers()["content-security-policy"]).toMatch(/^sandbox .*default-src 'none'/);
-  const files = git("show", "--name-only", "--format=%s", "HEAD").split("\n").filter(Boolean);
-  expect(files[0]).toBe(`source: add ${id}`);
-  expect(files).toContain(`attachments/sources/${id}.pdf`);
-  expect(files).toContain(`groups/${GROUP}.md`);
+  expect(ownerHas(`sources/${id}.md`)).toBe(true);
+  expect(ownerHas(`attachments/sources/${id}.pdf`)).toBe(true);
+  expect(read(`groups/${GROUP}.md`)).toContain(`id: ${id}`);
   await expect(page.getByRole("link", { name: `E2E Group ${stamp}` })).toBeVisible();
 });
 
@@ -125,7 +124,6 @@ test("notes autosave exactly as typed and survive a reload", async ({ page }) =>
   expect(read(`sources/${id}.md`)).toContain("## Notes\n\nAutosaved note\n\n## My own heading\n\nKept.\n");
   await page.reload();
   await expect(page.getByRole("textbox", { name: "My notes" })).toContainText("My own heading");
-  expect(git("log", "-1", "--format=%s")).toMatch(/^source: update notes /);
 });
 
 test("edit details, leave and rejoin a group", async ({ page }) => {
@@ -166,10 +164,10 @@ test("delete a source removes its PDF and group membership", async ({ page }) =>
   await page.getByRole("button", { name: "Delete source", exact: true }).click();
   await page.waitForURL("**/library");
   await expect(page.getByRole("link", { name: new RegExp(`^${TITLE}`) })).toHaveCount(0);
-  const files = git("show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort();
-  expect(files).toEqual(
-    [`attachments/sources/${id}.pdf`, `groups/${GROUP}.md`, `groups/e2e-tag-group-${stamp}.md`, `sources/${id}.md`].sort(),
-  );
+  expect(ownerHas(`sources/${id}.md`)).toBe(false);
+  expect(ownerHas(`attachments/sources/${id}.pdf`)).toBe(false);
+  expect(read(`groups/${GROUP}.md`)).not.toContain(`id: ${id}`);
+  expect(read(`groups/e2e-tag-group-${stamp}.md`)).not.toContain(`id: ${id}`);
 });
 
 test("signed out, sources and PDFs are unreachable", async ({ request }) => {

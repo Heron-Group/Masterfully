@@ -4,7 +4,6 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { toIso } from "./frontmatter";
-import { GitSync, type GitOptions, type SyncStatus } from "./git";
 import {
   assertSafeId,
   ContentError,
@@ -40,26 +39,13 @@ import {
   setAiSummary,
   SOURCE_SECTIONS,
 } from "./sections";
-import { formatCommitTime } from "../time";
+import { ContentLock } from "./lock";
 
-export type CommitAuthor = { name: string; email: string };
-
-/**
- * A store is either a whole repository (single user, tests) or a workspace:
- * one user's folder (e.g. users/<id>) inside a shared repository, using the
- * repository's Git connection.
- */
-export type WorkspaceOptions = {
-  git: GitSync;
-  repoDir: string;
-  /** Folder inside the repository, e.g. "users/abc123". */
-  prefix: string;
-  author?: CommitAuthor;
-  refreshIntervalMs?: number;
-  now?: () => Date;
-};
-
-export type StoreOptions = Omit<GitOptions, "onRemoteChange"> & {
+export type StoreOptions = {
+  /** The folder this store owns, e.g. one user's folder (users/<id>). */
+  dir: string;
+  /** Shared lock for the folder; one is created if not given. */
+  lock?: ContentLock;
   /** Minimum gap between filesystem rescans triggered by reads. */
   refreshIntervalMs?: number;
   /** Override the clock (tests). */
@@ -77,8 +63,6 @@ export const SETTINGS_FILE = "settings.md";
 
 /** Ids that would clash with page addresses (/library/new, /groups/new, /notes/new). */
 const RESERVED_IDS = new Set(["new"]);
-
-const CONTENT_GITIGNORE = `.DS_Store\nThumbs.db\n.obsidian/workspace*\n.trash/\n`;
 
 export type NewSource = {
   title: string;
@@ -99,12 +83,7 @@ export type SourcePatch = Partial<Pick<Source, "title" | "authors" | "type" | "u
  */
 export class ContentStore {
   readonly dir: string;
-  readonly git: GitSync;
-  /** Root of the Git repository (the same as `dir` unless this is a workspace). */
-  readonly repoDir: string;
-  /** This store's folder within the repository ("" for a whole repository). */
-  readonly prefix: string;
-  private readonly author?: CommitAuthor;
+  private readonly lock: ContentLock;
   private readonly now: () => Date;
   private readonly refreshIntervalMs: number;
 
@@ -121,56 +100,19 @@ export class ContentStore {
   private lastRefresh = 0;
   private forceRefresh = true;
 
-  constructor(opts: StoreOptions | WorkspaceOptions) {
+  constructor(opts: StoreOptions) {
     this.now = opts.now ?? (() => new Date());
     this.refreshIntervalMs = opts.refreshIntervalMs ?? 500;
-    if ("prefix" in opts) {
-      this.repoDir = path.resolve(opts.repoDir);
-      this.prefix = opts.prefix.replace(/\/+$/, "");
-      this.dir = path.join(this.repoDir, this.prefix);
-      this.git = opts.git;
-      this.author = opts.author;
-    } else {
-      this.dir = path.resolve(opts.dir);
-      this.repoDir = this.dir;
-      this.prefix = "";
-      this.git = new GitSync({
-        ...opts,
-        dir: this.dir,
-        onRemoteChange: () => {
-          this.forceRefresh = true;
-        },
-      });
-    }
+    this.dir = path.resolve(opts.dir);
+    this.lock = opts.lock ?? new ContentLock(this.dir);
   }
-
-  toRepoPath(rel: string): string {
-    return this.repoPath(rel);
-  }
-
-  /** Path relative to the repository root, for Git. */
-  private repoPath = (rel: string): string => (this.prefix ? `${this.prefix}/${rel}` : rel);
 
   async init(): Promise<void> {
-    // A workspace's repository is prepared once, by whoever owns it.
-    if (!this.prefix) await this.git.ensureRepo();
-    await this.git.exclusive(async () => {
-      const created: string[] = [];
-      if (!this.prefix && !(await exists(this.abs(".gitignore")))) {
-        await writeAtomic(this.abs(".gitignore"), CONTENT_GITIGNORE, this.tmpDir());
-        created.push(".gitignore");
-      }
+    await this.lock.exclusive(async () => {
+      await fs.mkdir(this.dir, { recursive: true });
       if (!(await exists(this.abs(SETTINGS_FILE)))) {
         const settings: Settings = { researchContext: "", updated: this.stamp(), extra: {} };
         await writeAtomic(this.abs(SETTINGS_FILE), serializeSettings(settings), this.tmpDir());
-        created.push(SETTINGS_FILE);
-      }
-      if (created.length) {
-        await this.git.commitPaths(
-          created.map(this.repoPath),
-          this.prefix ? `content: set up workspace ${this.prefix}` : "content: initialise repository",
-          this.author,
-        );
       }
     });
     await this.refresh({ force: true });
@@ -336,12 +278,12 @@ export class ContentStore {
   // --- Writes ---------------------------------------------------------------
 
   /**
-   * Every change goes through here: files are written inside the Git lock,
-   * then committed as one commit with `message`. If anything throws, the
-   * touched files are restored from the last commit.
+   * Every change goes through here: files are written inside the folder's
+   * lock. If anything throws, every touched file and folder is put back as
+   * it was.
    */
-  private async write<T>(message: string | ((result: T) => string), fn: (tx: Tx) => Promise<T>): Promise<T> {
-    return this.git.exclusive(() =>
+  private async write<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+    return this.lock.exclusive(() =>
       this.indexLock.run(async () => {
         await this.scanAll(); // make sure ids and lookups see hand edits
         const tx = new Tx(this);
@@ -349,14 +291,6 @@ export class ContentStore {
         try {
           result = await fn(tx);
         } catch (err) {
-          await tx.rollback();
-          throw err;
-        }
-        try {
-          const msg = typeof message === "function" ? message(result) : message;
-          await this.git.commitPaths(tx.touched.map(this.repoPath), msg, this.author);
-        } catch (err) {
-          await this.git.unstage(tx.touched.map(this.repoPath));
           await tx.rollback();
           throw err;
         }
@@ -374,8 +308,9 @@ export class ContentStore {
     if (!inside || inside.startsWith("..") || path.isAbsolute(inside)) {
       throw new ContentError(`Path outside content folder: ${rel}`, 400);
     }
-    if (inside === ".git" || inside.startsWith(`.git${path.sep}`)) {
-      throw new ContentError(`Path inside .git: ${rel}`, 400);
+    // Dot folders (.tmp, .lock) are the app's own.
+    if (inside.startsWith(".")) {
+      throw new ContentError(`Path not allowed: ${rel}`, 400);
     }
     return resolved;
   }
@@ -384,13 +319,13 @@ export class ContentStore {
     return path.relative(this.dir, abs).split(path.sep).join("/");
   }
 
-  /** Scratch space for atomic writes and uploads; inside .git so Git never sees it. */
+  /** Scratch space for atomic writes, uploads and undo copies (same disk, so moves are renames). */
   tmpDir(): string {
-    return path.join(this.repoDir, ".git", "research-portal-tmp");
+    return path.join(this.dir, ".tmp");
   }
 
   /**
-   * Stream an upload to a temporary file before taking the Git lock, so a
+   * Stream an upload to a temporary file before taking the write lock, so a
    * slow 50 MB upload never blocks other writes. Pass the result to
    * `Tx.moveIn` inside a write, or `discardUpload` if it is not used.
    */
@@ -489,7 +424,7 @@ export class ContentStore {
 
   /**
    * Create an entry. `attachments` are staged uploads (see `stageUpload`)
-   * that are moved into attachments/journal/<id>/ in the same commit.
+   * that are moved into attachments/journal/<id>/ in the same change.
    */
   async createJournalEntry(input: {
     body: string;
@@ -499,9 +434,7 @@ export class ContentStore {
     if (!body && !input.attachments?.length) {
       throw new ContentError("An entry needs text or an attachment", 400);
     }
-    return this.write(
-      (e) => `journal: add entry ${formatCommitTime(e.created)}`,
-      async (tx) => {
+    return this.write(async (tx) => {
         const now = this.now();
         const id = uniqueId(journalIdFor(now), (c) => this.journal.has(c));
         const created = toIso(now);
@@ -530,9 +463,7 @@ export class ContentStore {
     id: string,
     input: { body?: string; addAttachments?: StagedFile[]; removeAttachments?: string[] },
   ): Promise<JournalEntry> {
-    return this.write(
-      (e) => `journal: edit entry ${formatCommitTime(e.created)}`,
-      async (tx) => {
+    return this.write(async (tx) => {
         const entry = this.requireJournal(id);
         const remove = new Set(input.removeAttachments ?? []);
         for (const file of remove) {
@@ -562,9 +493,7 @@ export class ContentStore {
 
   /** Delete an entry and its attachments folder. */
   async deleteJournalEntry(id: string): Promise<void> {
-    await this.write(
-      () => `journal: delete entry ${formatCommitTime(this.journal.get(id)?.created ?? id)}`,
-      async (tx) => {
+    await this.write(async (tx) => {
         const entry = this.requireJournal(id);
         await tx.remove(entry.path);
         for (const a of entry.attachments) await tx.removeAttachment(a.file);
@@ -617,9 +546,7 @@ export class ContentStore {
   ): Promise<Source> {
     const title = input.title.trim();
     if (!title) throw new ContentError("A source needs a title", 400);
-    return this.write(
-      (s) => `source: add ${s.id}`,
-      async (tx) => {
+    return this.write(async (tx) => {
         const authors = (input.authors ?? []).map((a) => a.trim()).filter(Boolean);
         const id = uniqueId(
           sourceSlug({ title, authors, year: input.year }),
@@ -669,7 +596,7 @@ export class ContentStore {
    * null` or `url: ""` clear that field. An empty title is ignored.
    */
   async updateSource(id: string, patch: SourcePatch): Promise<Source> {
-    return this.write(`source: update details ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const source = this.requireSource(id);
       const next: Source = {
         ...source,
@@ -687,7 +614,7 @@ export class ContentStore {
 
   /** Rewrite only the `## Notes` section. */
   async setSourceNotes(id: string, notes: string): Promise<Source> {
-    return this.write(`source: update notes ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const source = this.requireSource(id);
       const body = replaceSection(source.body, "Notes", notes, SOURCE_SECTIONS, {
         position: "start",
@@ -701,7 +628,7 @@ export class ContentStore {
 
   /** Replace or add the source PDF. */
   async setSourcePdf(id: string, pdf: StagedFile | null): Promise<Source> {
-    return this.write(`source: ${pdf ? "attach" : "remove"} PDF ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const source = this.requireSource(id);
       let pdfPath: string | undefined;
       if (source.pdf) await tx.removeAttachment(source.pdf);
@@ -717,7 +644,7 @@ export class ContentStore {
 
   /** Rewrite only the `## AI summary` section. */
   async setSourceAiSummary(id: string, summary: { text: string; model: string }): Promise<Source> {
-    return this.write(`source: AI summary ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const source = this.requireSource(id);
       const generated = this.stamp();
       const body = setAiSummary(source.body, { ...summary, generated }, SOURCE_SECTIONS);
@@ -727,9 +654,9 @@ export class ContentStore {
     });
   }
 
-  /** Delete a source, its PDF, and its membership of every group, in one commit. */
+  /** Delete a source, its PDF, and its membership of every group, all or nothing. */
   async deleteSource(id: string): Promise<void> {
-    await this.write(`source: delete ${id}`, async (tx) => {
+    await this.write(async (tx) => {
       const source = this.requireSource(id);
       const now = this.stamp();
       for (const group of this.groups.values()) {
@@ -772,9 +699,7 @@ export class ContentStore {
   async createGroup(input: { title: string; overview?: string }): Promise<Group> {
     const title = input.title.trim();
     if (!title) throw new ContentError("A group needs a title", 400);
-    return this.write(
-      (g) => `group: create ${g.id}`,
-      async (tx) => {
+    return this.write(async (tx) => {
         const id = uniqueId(slugify(title) || "group", (c) => this.groups.has(c) || RESERVED_IDS.has(c));
         const now = this.stamp();
         const overview = (input.overview ?? "").trim();
@@ -798,14 +723,14 @@ export class ContentStore {
 
   async renameGroup(id: string, title: string): Promise<Group> {
     if (!title.trim()) throw new ContentError("A group needs a title", 400);
-    return this.write(`group: rename ${id}`, (tx) =>
+    return this.write((tx) =>
       this.writeGroup(tx, { ...this.requireGroup(id), title: title.trim() }),
     );
   }
 
   /** Rewrite only the `## Overview` section. */
   async setGroupOverview(id: string, overview: string): Promise<Group> {
-    return this.write(`group: update overview ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const group = this.requireGroup(id);
       const body = replaceSection(group.body, "Overview", overview, GROUP_SECTIONS, {
         position: "start",
@@ -820,13 +745,13 @@ export class ContentStore {
    * and editing group-specific notes). Unknown source ids are rejected.
    */
   async setGroupSources(id: string, refs: GroupSourceRef[]): Promise<Group> {
-    return this.write(`group: update sources ${id}`, (tx) =>
+    return this.write((tx) =>
       this.applyGroupSources(tx, this.requireGroup(id), refs),
     );
   }
 
   async addSourceToGroup(groupId: string, sourceId: string, note = ""): Promise<Group> {
-    return this.write(`group: add ${sourceId} to ${groupId}`, async (tx) => {
+    return this.write(async (tx) => {
       const group = this.requireGroup(groupId);
       if (group.sources.some((s) => s.id === sourceId)) return group;
       return this.applyGroupSources(tx, group, [...group.sources, { id: sourceId, note }]);
@@ -834,7 +759,7 @@ export class ContentStore {
   }
 
   async removeSourceFromGroup(groupId: string, sourceId: string): Promise<Group> {
-    return this.write(`group: remove ${sourceId} from ${groupId}`, async (tx) => {
+    return this.write(async (tx) => {
       const group = this.requireGroup(groupId);
       return this.applyGroupSources(
         tx,
@@ -870,7 +795,7 @@ export class ContentStore {
 
   /** Change the group-specific note for one source. */
   async setGroupSourceNote(groupId: string, sourceId: string, note: string): Promise<Group> {
-    return this.write(`group: update note on ${sourceId} in ${groupId}`, async (tx) => {
+    return this.write(async (tx) => {
       const group = this.requireGroup(groupId);
       if (!group.sources.some((s) => s.id === sourceId)) {
         throw new ContentError("That source isn't in this group", 404);
@@ -884,7 +809,7 @@ export class ContentStore {
 
   /** Rewrite only the `## AI summary` section. */
   async setGroupAiSummary(id: string, summary: { text: string; model: string }): Promise<Group> {
-    return this.write(`group: AI summary ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const group = this.requireGroup(id);
       const generated = this.stamp();
       const body = setAiSummary(group.body, { ...summary, generated }, GROUP_SECTIONS);
@@ -894,7 +819,7 @@ export class ContentStore {
 
   /** Deleting a group never deletes its sources. */
   async deleteGroup(id: string): Promise<void> {
-    await this.write(`group: delete ${id}`, async (tx) => {
+    await this.write(async (tx) => {
       const group = this.groups.get(id);
       if (!group) throw new ContentError("Group not found", 404);
       await tx.remove(group.path);
@@ -950,9 +875,7 @@ export class ContentStore {
   async createNote(input: { title: string; text?: string; attachments?: StagedFile[] }): Promise<Note> {
     const title = input.title.trim();
     if (!title) throw new ContentError("A note needs a title", 400);
-    return this.write(
-      (n) => `note: add ${n.id}`,
-      async (tx) => {
+    return this.write(async (tx) => {
         const id = uniqueId(
           slugify(title) || "note",
           (c) => this.notes.has(c) || RESERVED_IDS.has(c) || tx.has(`${DIRS.notes}/${c}.md`),
@@ -979,7 +902,7 @@ export class ContentStore {
 
   async renameNote(id: string, title: string): Promise<Note> {
     if (!title.trim()) throw new ContentError("A note needs a title", 400);
-    return this.write(`note: rename ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const next = { ...this.requireNote(id), title: title.trim(), updated: this.stamp() };
       await tx.writeText(next.path, serializeNote(next));
       return next;
@@ -988,7 +911,7 @@ export class ContentStore {
 
   /** Rewrite only the `## Notes` section (the note's text). */
   async setNoteText(id: string, text: string): Promise<Note> {
-    return this.write(`note: update ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const note = this.requireNote(id);
       const body = replaceSection(note.body, "Notes", text, NOTE_SECTIONS, {
         position: "start",
@@ -1002,7 +925,7 @@ export class ContentStore {
 
   /** Add staged uploads and/or remove attachments (by `file` path). */
   async updateNoteAttachments(id: string, input: { add?: StagedFile[]; remove?: string[] }): Promise<Note> {
-    return this.write(`note: update attachments ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const note = this.requireNote(id);
       const remove = new Set(input.remove ?? []);
       for (const file of remove) {
@@ -1023,7 +946,7 @@ export class ContentStore {
 
   /** Rewrite only the `## AI summary` section. */
   async setNoteAiSummary(id: string, summary: { text: string; model: string }): Promise<Note> {
-    return this.write(`note: AI summary ${id}`, async (tx) => {
+    return this.write(async (tx) => {
       const note = this.requireNote(id);
       const generated = this.stamp();
       const body = setAiSummary(note.body, { ...summary, generated }, NOTE_SECTIONS);
@@ -1035,7 +958,7 @@ export class ContentStore {
 
   /** Delete a note and its attachments. */
   async deleteNote(id: string): Promise<void> {
-    await this.write(`note: delete ${id}`, async (tx) => {
+    await this.write(async (tx) => {
       const note = this.requireNote(id);
       await tx.remove(note.path);
       for (const a of note.attachments) await tx.removeAttachment(a.file);
@@ -1058,7 +981,7 @@ export class ContentStore {
   }
 
   async setResearchContext(text: string): Promise<Settings> {
-    return this.write("settings: update research context", async (tx) => {
+    return this.write(async (tx) => {
       const next: Settings = { ...this.settingsCache, researchContext: text.trim(), updated: this.stamp() };
       await tx.writeText(SETTINGS_FILE, serializeSettings(next));
       return next;
@@ -1083,24 +1006,14 @@ export class ContentStore {
     return stat?.isFile() ? abs : null;
   }
 
-  syncStatus(): SyncStatus {
-    return this.git.getStatus();
-  }
-
-  syncNow(): Promise<SyncStatus> {
-    return this.git.sync();
-  }
-
-  dispose(): void {
-    this.git.dispose();
-  }
 }
 
 export type StagedFile = { tempPath: string; name: string; type: string; size: number };
 
-/** File operations within one write; tracks touched paths for the commit. */
+/** File operations within one write; tracks touched paths so they can be undone. */
 class Tx {
   readonly touched: string[] = [];
+  /** path → copy kept aside (null: it didn't exist before this change) */
   private backups = new Map<string, string | null>();
 
   constructor(private readonly store: ContentStore) {}
@@ -1109,6 +1022,7 @@ class Tx {
     return this.touched.includes(rel);
   }
 
+  /** Before a file is written, keep a copy of what was there (or note it was new). */
   private async track(rel: string): Promise<void> {
     if (!this.touched.includes(rel)) this.touched.push(rel);
     if (this.backups.has(rel)) return;
@@ -1120,7 +1034,7 @@ class Tx {
       await fs.copyFile(abs, backup);
       this.backups.set(rel, backup);
     } else {
-      this.backups.set(rel, stat ? "dir" : null);
+      this.backups.set(rel, null);
     }
   }
 
@@ -1146,36 +1060,43 @@ class Tx {
     await this.remove(rel);
   }
 
+  /** Remove a file or folder, keeping it aside until the change succeeds. */
   async remove(rel: string): Promise<void> {
-    await this.track(rel);
-    await fs.rm(this.store.abs(rel), { recursive: true, force: true });
-    await removeEmptyParents(path.dirname(this.store.abs(rel)), this.store.dir);
-  }
-
-  /** Put files back as they were before this transaction. */
-  async rollback(): Promise<void> {
-    const dirs: string[] = [];
-    for (const [rel, backup] of this.backups) {
-      const abs = this.store.abs(rel);
-      if (backup === "dir") {
-        dirs.push(rel);
-        continue;
-      }
-      if (backup) {
-        await fs.mkdir(path.dirname(abs), { recursive: true });
-        await fs.copyFile(backup, abs);
+    const abs = this.store.abs(rel);
+    if (!this.touched.includes(rel)) this.touched.push(rel);
+    if (!this.backups.has(rel)) {
+      const stat = await fs.stat(abs).catch(() => null);
+      if (stat) {
+        await fs.mkdir(this.store.tmpDir(), { recursive: true });
+        const aside = path.join(this.store.tmpDir(), `removed-${randomUUID()}`);
+        await fs.rename(abs, aside);
+        this.backups.set(rel, aside);
       } else {
-        await fs.rm(abs, { recursive: true, force: true });
+        this.backups.set(rel, null);
       }
     }
-    // Removed folders (e.g. an entry's attachments) come back from the last commit.
-    await this.store.git.restoreFromHead(dirs.map((d) => this.store.toRepoPath(d)));
-    await this.cleanup();
+    await fs.rm(abs, { recursive: true, force: true });
+    await removeEmptyParents(path.dirname(abs), this.store.dir);
+  }
+
+  /** Put files and folders back as they were before this change. */
+  async rollback(): Promise<void> {
+    // Newest first, so a folder comes back before files are restored inside it.
+    for (const [rel, backup] of [...this.backups].reverse()) {
+      const abs = this.store.abs(rel);
+      // Clear whatever this change put there (if anything) before restoring.
+      if (await exists(abs)) await fs.rm(abs, { recursive: true, force: true });
+      if (backup) {
+        await fs.mkdir(path.dirname(abs), { recursive: true });
+        await fs.rename(backup, abs);
+      }
+    }
+    this.backups.clear();
   }
 
   async cleanup(): Promise<void> {
     for (const backup of this.backups.values()) {
-      if (backup && backup !== "dir") await fs.rm(backup, { force: true });
+      if (backup) await fs.rm(backup, { recursive: true, force: true });
     }
   }
 }

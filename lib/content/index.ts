@@ -4,42 +4,35 @@ import path from "node:path";
 import { Accounts, USERS_DIR, type Account } from "../accounts";
 import { serverConfig } from "../config";
 import { ContentError } from "./ids";
-import { GitSync } from "./git";
+import { ContentLock } from "./lock";
+import { migrateToUserFolders } from "./migrate";
 import { ContentStore } from "./store";
 
 export { ContentError } from "./ids";
-export type { SyncStatus } from "./git";
 export type * from "./schemas";
 export type { StagedFile } from "./store";
 
 /**
- * One content repository holds everyone's content: accounts/<id>.md, and a
- * private workspace per user in users/<id>/. Each signed-in user only ever
- * gets a store rooted at their own workspace.
+ * The content folder holds one folder per user, users/<id>/, with
+ * everything about them: account, encrypted AI key and content. Each
+ * signed-in user only ever gets a store rooted at their own folder.
  */
 
 type Shared = {
-  repo: Promise<{ dir: string; git: GitSync; accounts: Accounts }>;
+  repo: Promise<{ dir: string; accounts: Accounts }>;
   stores: Map<string, Promise<ContentStore>>;
 };
 
-// Kept on globalThis so dev-mode hot reloads reuse one repo and push timer.
+// Kept on globalThis so dev-mode hot reloads reuse one set of stores and locks.
 const g = globalThis as unknown as { __researchPortal?: Shared };
-
-const GITIGNORE = `.DS_Store\nThumbs.db\n.obsidian/workspace*\n.trash/\n`;
 
 async function openRepo() {
   const config = serverConfig();
   const dir = config.contentDir;
-  const git = new GitSync({ dir, ...config.git });
-  await git.ensureRepo();
-  if (!(await fs.stat(path.join(dir, ".gitignore")).catch(() => null))) {
-    await git.exclusive(async () => {
-      await fs.writeFile(path.join(dir, ".gitignore"), GITIGNORE);
-      await git.commitPaths([".gitignore"], "content: initialise repository");
-    });
-  }
-  return { dir, git, accounts: new Accounts({ dir, git }, config.ownerEmail) };
+  await fs.mkdir(path.join(dir, USERS_DIR), { recursive: true });
+  const moved = await migrateToUserFolders(dir, config.legacySecretsDir);
+  if (moved.length) console.log(`[content] moved into user folders:\n  ${moved.join("\n  ")}`);
+  return { dir, accounts: new Accounts({ dir, lock: new ContentLock(dir) }, config.ownerEmail) };
 }
 
 function shared(): Shared {
@@ -53,7 +46,7 @@ function shared(): Shared {
   return g.__researchPortal;
 }
 
-/** The shared content repository (sync status, accounts). */
+/** The content folder and its accounts. */
 export function getRepo() {
   return shared().repo;
 }
@@ -68,13 +61,8 @@ export function getWorkspaceStore(account: Account): Promise<ContentStore> {
   let store = s.stores.get(account.id);
   if (!store) {
     store = (async () => {
-      const { dir, git } = await s.repo;
-      const ws = new ContentStore({
-        git,
-        repoDir: dir,
-        prefix: `${USERS_DIR}/${account.id}`,
-        author: { name: account.name, email: account.email || `${account.id}@users.masterfully` },
-      });
+      const { dir } = await s.repo;
+      const ws = new ContentStore({ dir: path.join(dir, USERS_DIR, account.id) });
       await ws.init();
       return ws;
     })();

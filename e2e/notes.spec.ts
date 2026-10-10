@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { git, workspace } from "./fixtures";
+import { ownerHas, workspace } from "./fixtures";
 import { setEditorText, signIn } from "./helpers";
 
 // Needs AI_FAKE=1 (see .env.local) so the summary uses the scripted stand-in.
@@ -36,7 +36,6 @@ test("add a note with text and an attachment; it is saved once titled", async ({
   const file = noteFile();
   expect(file).toContain(`title: ${TITLE}`);
   expect(file).toContain(`Seven people, two hours. ${stamp}`);
-  expect(git("log", "-1", "--format=%s")).toMatch(/^note: add /);
 });
 
 test("edit the note's text and title, and search for it", async ({ page }) => {
@@ -74,6 +73,6 @@ test("remove the attachment, then delete the note", async ({ page }) => {
   await page.getByRole("button", { name: "Delete note", exact: true }).click();
   await page.waitForURL("**/notes");
   await expect(page.getByRole("link", { name: new RegExp(TITLE) })).toHaveCount(0);
-  expect(git("log", "-1", "--format=%s")).toMatch(/^note: delete /);
+  expect(ownerHas(`notes/${noteUrl.split("/").pop()}.md`)).toBe(false);
   noteUrl = "";
 });

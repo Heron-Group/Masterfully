@@ -33,10 +33,10 @@ export function SignInOptions({ configured }: { configured: ("google" | "microso
       <a href={`/api/auth/microsoft${q}`} className={providerButton}>
         <MicrosoftLogo /> Continue with Microsoft
       </a>
-      <p className="pt-1 text-center text-xs text-faint">New here? Signing in creates your own private workspace.</p>
+      <p className="pt-1 text-center text-xs text-faint">New here? Sign in to create your workspace.</p>
       {!configured.length && (
         <p className="text-center text-xs text-warn">
-          Sign-in isn&apos;t set up on this server yet: add the Google and Microsoft credentials (see the README).
+          Sign-in isn&apos;t set up on this server yet: Add the Google and Microsoft credentials (see the README).
         </p>
       )}
     </div>

@@ -4,7 +4,7 @@ import { signIn } from "./helpers";
 test("signed-out visitors are sent to the login page", async ({ page, request }) => {
   await page.goto("/library");
   await expect(page).toHaveURL(/\/login\?next=%2Flibrary$/);
-  expect((await request.get("/api/sync")).status()).toBe(401);
+  expect((await request.get("/api/journal")).status()).toBe(401);
 });
 
 test("the login page offers only Google and Microsoft", async ({ page }) => {
@@ -18,7 +18,7 @@ test("signing in returns to the requested page, signing out ends the session", a
   await signIn(page, "/library");
   await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Add source" })).toBeVisible();
-  expect((await page.request.get("/api/sync")).status()).toBe(200);
+  expect((await page.request.get("/api/journal")).status()).toBe(200);
 
   await page.goto("/settings");
   await page.getByRole("button", { name: "Sign out" }).click();
