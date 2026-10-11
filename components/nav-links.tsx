@@ -1,6 +1,6 @@
 "use client";
 
-import { Library, NotebookPen, Settings, SquareStack, StickyNote, type LucideIcon } from "lucide-react";
+import { Library, NotebookPen, Settings, SquareStack, StickyNote, Waypoints, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentProps } from "react";
@@ -11,6 +11,7 @@ export const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/notes", label: "Notes", icon: StickyNote },
   { href: "/library", label: "Library", icon: Library },
   { href: "/groups", label: "Groups", icon: SquareStack },
+  { href: "/map", label: "Map", icon: Waypoints },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

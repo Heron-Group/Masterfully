@@ -6,6 +6,7 @@ import { ui } from "@/components/ui";
 import { groupToDto } from "@/lib/api";
 import { requireSession } from "@/lib/auth";
 import { getContentStore } from "@/lib/content";
+import { groupColours } from "@/lib/map/server";
 import { GroupView } from "./group-view";
 
 export async function generateMetadata(props: PageProps<"/groups/[id]">): Promise<Metadata> {
@@ -25,16 +26,17 @@ export default function GroupPage(props: PageProps<"/groups/[id]">) {
 }
 
 async function GroupLoader({ params }: { params: PageProps<"/groups/[id]">["params"] }) {
-  await requireSession();
+  const account = await requireSession();
   const { id } = await params;
   const store = await getContentStore();
   const group = await store.getGroup(id);
   if (!group) notFound();
+  const colours = await groupColours(account.id, await store.listGroups());
   const library = (await store.listSources()).map((s) => ({
     id: s.id,
     title: s.title,
     authors: s.authors,
     year: s.year,
   }));
-  return <GroupView key={group.id} group={await groupToDto(group, store)} library={library} />;
+  return <GroupView key={group.id} group={await groupToDto(group, store)} library={library} colour={colours[group.id]} />;
 }

@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { ContentError, getContentStore } from "@/lib/content";
 import type { GroupSourceRef } from "@/lib/content";
+import { isPaletteColour } from "@/lib/map/colours";
+import { updateMapLayout } from "@/lib/map/layout";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -64,4 +66,19 @@ export async function deleteGroup(id: string): Promise<ActionResult> {
   const result = await run(() => getContentStore().then((s) => s.deleteGroup(id)), { refresh: false });
   if (result.ok) redirect("/groups");
   return result;
+}
+
+/** The group's colour on the Source Map (one of the palette's colours), saved in map-layout.json. */
+export async function setGroupColour(id: string, hex: string): Promise<ActionResult> {
+  const account = await requireSession();
+  if (!isPaletteColour(hex)) return { ok: false, error: "Choose one of the palette's colours." };
+  try {
+    await updateMapLayout(account.id, (layout) => {
+      layout.colours[id] = hex;
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: "Something went wrong on the server. Nothing was saved." };
+  }
 }

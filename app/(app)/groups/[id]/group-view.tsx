@@ -10,7 +10,8 @@ import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
 import type { GroupDto } from "@/lib/dto";
 import { formatShortDate, formatTime } from "@/lib/time";
-import { deleteGroup, renameGroup, saveGroupOverview, type ActionResult } from "../actions";
+import { GroupColourPicker } from "@/components/group-colour-picker";
+import { deleteGroup, renameGroup, saveGroupOverview, setGroupColour, type ActionResult } from "../actions";
 import { GroupSources, type LibraryItem } from "./group-sources";
 import { GroupSummaryPanel } from "./group-summary";
 
@@ -18,7 +19,7 @@ export function changed() {
   window.dispatchEvent(new Event(CONTENT_CHANGED_EVENT));
 }
 
-export function GroupView({ group, library }: { group: GroupDto; library: LibraryItem[] }) {
+export function GroupView({ group, library, colour }: { group: GroupDto; library: LibraryItem[]; colour?: string }) {
   if (group.problem) {
     return (
       <div className="mt-6 rounded-md bg-warn/10 px-4 py-3 text-sm">
@@ -32,7 +33,7 @@ export function GroupView({ group, library }: { group: GroupDto; library: Librar
   }
   return (
     <article className="mt-4 space-y-12">
-      <Header group={group} />
+      <Header group={group} colour={colour} />
       <Overview group={group} />
       <GroupSummaryPanel group={group} />
       <GroupSources group={group} library={library} />
@@ -41,7 +42,7 @@ export function GroupView({ group, library }: { group: GroupDto; library: Librar
 }
 
 /** Title (renamed in place; the file name never changes), then one quiet line of details. */
-function Header({ group }: { group: GroupDto }) {
+function Header({ group, colour }: { group: GroupDto; colour?: string }) {
   const { save, label, isError } = useInlineSave();
   const count = group.sources.length;
   const dot = <span aria-hidden="true" className="px-0.5 text-faint">·</span>;
@@ -69,6 +70,12 @@ function Header({ group }: { group: GroupDto }) {
         </span>
         {dot}
         <span className="px-1.5 text-faint">Created {formatShortDate(group.created)}</span>
+        {colour && (
+          <>
+            {dot}
+            <GroupColourPicker colour={colour} onPick={(hex) => setGroupColour(group.id, hex)} />
+          </>
+        )}
         <span className="ml-auto">
           <DeleteGroupControl group={group} />
         </span>

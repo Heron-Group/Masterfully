@@ -2,8 +2,8 @@
 
 A private web app for practice-led PhD research: a **research journal** that
 works like a messaging app, **notes** for longer writing with attachments, and a
-**reading list** of sources organised into reading groups, with optional AI
-summaries.
+**reading list** of sources organised into reading groups, a **source map**
+showing how sources and groups connect, and optional AI summaries.
 
 Anyone can sign up with a **Google or Microsoft account**; each person gets their
 own private workspace. AI summaries use each person's **own Claude or OpenAI API
@@ -121,6 +121,7 @@ content/
     account.md                                 name, email and sign-ins
     ai-key.json                                encrypted AI key (if they added one)
     settings.md                                their research context
+    map-layout.json                            source map: group colours and layout
     journal/2026/10/2026-10-09T14-32-05Z.md    one file per entry
     sources/brody-2025-graphic-language.md     one file per source
     groups/co-design-foundations.md            one file per reading group
@@ -359,7 +360,8 @@ the tests at it, e.g. `E2E_PORT=3200 E2E_CONTENT_DIR=/path/to/content npx playwr
 | [lib/accounts.ts](lib/accounts.ts) | Accounts (`accounts/<id>.md`), linking sign-ins by verified email, and moving single-user content into the owner's workspace. |
 | [proxy.ts](proxy.ts) | Redirects signed-out requests. Pages, server actions and API routes also check the session themselves. Upload routes skip the proxy (it would cut large bodies off at 10 MB). |
 | [lib/ai/](lib/ai/) | Prompts, PDF handling, safe URL fetching, streaming summaries from Claude or OpenAI, and each user's encrypted key ([user-config.ts](lib/ai/user-config.ts)). |
-| [app/](app/) | Pages (journal, library, groups, settings) and API routes. |
+| [lib/map/](lib/map/) | The source map: [graph.ts](lib/map/graph.ts) builds the network and crossover figures (shared sources, bridge links, hubs) from sources and groups on every request, with unit tests in [tests/map.test.ts](tests/map.test.ts); group colours and the map's own layout file. Drawn with Cytoscape.js in [components/map/](components/map/). |
+| [app/](app/) | Pages (journal, notes, library, groups, map, settings) and API routes. |
 | [instrumentation.ts](instrumentation.ts) | On start: clone or open the content repo. Each workspace's index is built on its user's first request. |
 | [server.js](server.js) | Startup file for Plesk and `npm start`. |
 

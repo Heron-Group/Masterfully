@@ -54,13 +54,13 @@ export async function setEditorText(page: Page, editor: Locator, text: string) {
 /**
  * Wait until React has hydrated the whole page: every element has React's
  * fiber key (streamed sections hydrate after the shell, so checking one
- * element isn't enough). Scripts, Next's own elements and CodeMirror's DOM
+ * element isn't enough). Scripts, Next's own elements, CodeMirror's and Cytoscape's DOM
  * (and the hidden inputs React adds to server-action forms) are skipped. "networkidle" alone can come first when nothing is fetched
  * after load, and clicks or scrolls before hydration are lost.
  */
 export async function waitForHydration(page: Page) {
   await page.waitForFunction(() => {
-    const skip = "script, template, style, link, input[type=hidden], nextjs-portal, next-route-announcer, .cm-editor";
+    const skip = "script, template, style, link, input[type=hidden], nextjs-portal, next-route-announcer, .cm-editor, [data-testid=map-canvas] *";
     const hydrated = (el: Element) => Object.keys(el).some((k) => k.startsWith("__reactFiber"));
     const all = [...document.body.querySelectorAll("*")];
     return all.length > 0 && all.every((el) => el.closest(skip) || hydrated(el));
