@@ -141,6 +141,16 @@ export async function getAiCredentials(userId: string): Promise<AiCredentials | 
   return { provider: c.provider, model: c.models[c.provider] || DEFAULT_MODELS[c.provider], apiKey };
 }
 
+/**
+ * A provider's saved key, whichever provider is chosen for summaries (the
+ * natural reading voice uses an OpenAI key even if summaries use Claude).
+ */
+export async function getProviderKey(userId: string, provider: AiProvider): Promise<string | null> {
+  const stored = (await read(userId)).keys[provider];
+  const key = encryptionKeyOrNull();
+  return stored && key ? decryptSecret(stored.secret, key) : null;
+}
+
 export type AiSettingsUpdate = {
   provider?: AiProvider;
   model?: string;

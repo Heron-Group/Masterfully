@@ -91,6 +91,7 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   // The web-page reader serves third-party HTML, so it must be sandboxed.
   const reader = await page.request.get(`/api/reader/${id}`);
   expect(reader.headers()["content-security-policy"]).toMatch(/^sandbox .*default-src 'none'/);
+  expect(reader.headers()["content-security-policy"]).not.toContain("allow-scripts");
   expect(ownerHas(`sources/${id}.md`)).toBe(true);
   expect(ownerHas(`attachments/sources/${id}.pdf`)).toBe(true);
   expect(read(`groups/${GROUP}.md`)).toContain(`id: ${id}`);

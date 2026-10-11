@@ -9,8 +9,10 @@ import { getContentStore } from "@/lib/content";
  * and shown in a clean page instead.
  *
  * The HTML comes from a third-party site, so the response is locked down:
- * a sandbox with no scripts and no access to this origin, and a CSP that
- * only allows images and inline styles.
+ * a sandbox in which nothing can run (no scripts, no forms) and a CSP that
+ * only allows images and inline styles. allow-same-origin lets the reading
+ * panel (our own code, in the parent page) read the text and the selection
+ * for reading aloud; with scripts blocked, the page itself can't use it.
  */
 
 const cache = new Map<string, { at: number; page: FetchedPage }>();
@@ -58,12 +60,13 @@ ${opts.base ? `<base href="${escape(opts.base)}" target="_blank">` : ""}
   td, th { border: 1px solid ${c.rule}; padding: .35em .6em; }
   hr { border: 0; border-top: 1px solid ${c.rule}; }
   .notice { font: .95rem/1.6 system-ui, sans-serif; color: ${c.muted}; }
+  ::highlight(rp-reading) { background-color: ${opts.dark ? "rgba(255,74,0,.35)" : "rgba(255,74,0,.2)"}; }
 </style></head><body>${opts.body}</body></html>`;
   return new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Content-Security-Policy":
-        "sandbox allow-popups allow-popups-to-escape-sandbox; default-src 'none'; img-src https: data:; media-src https:; style-src 'unsafe-inline'; frame-ancestors 'self'",
+        "sandbox allow-same-origin allow-popups allow-popups-to-escape-sandbox; default-src 'none'; img-src https: data:; media-src https:; style-src 'unsafe-inline'; frame-ancestors 'self'",
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, no-store",
       "Referrer-Policy": "no-referrer",

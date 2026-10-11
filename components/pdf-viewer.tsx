@@ -4,6 +4,22 @@ import { Minus, MoveHorizontal, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import "pdfjs-dist/web/pdf_viewer.css";
 
+/** What the reading panel's read-aloud needs from the viewer. */
+export type PdfApi = {
+  pageCount(): number;
+  currentPage(): number;
+  goToPage(page: number): void;
+  /** Each page's text, as pdf.js lays it out (line ends as newlines). */
+  pageTexts(): Promise<string[]>;
+  /** The rendered, selectable text of a page (only pages near the view are rendered). */
+  textLayer(page: number): HTMLElement | null;
+  /** The scrolling element. */
+  scroller(): HTMLElement | null;
+};
+
+type TextItem = { str?: string; hasEOL?: boolean };
+type PdfDoc = { numPages: number; getPage(n: number): Promise<{ getTextContent(): Promise<{ items: TextItem[] }> }> };
+
 type Viewer = {
   currentScaleValue: string;
   currentScale: number;
@@ -18,7 +34,7 @@ type Viewer = {
  * (including iPhone Safari, which only shows the first page of an embedded
  * PDF): continuous pages, selectable text for copying quotes, links, zoom.
  */
-export function PdfViewer({ url, title }: { url: string; title: string }) {
+export function PdfViewer({ url, title, onReady }: { url: string; title: string; onReady?: (api: PdfApi | null) => void }) {
   const container = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Viewer | null>(null);
   const [page, setPage] = useState(1);
@@ -60,6 +76,27 @@ export function PdfViewer({ url, title }: { url: string; title: string }) {
         if (cancelled) return;
         viewer.setDocument(doc);
         linkService.setDocument(doc, null);
+
+        let texts: Promise<string[]> | null = null;
+        const pdf = doc as unknown as PdfDoc;
+        onReady?.({
+          pageCount: () => pdf.numPages,
+          currentPage: () => viewer.currentPageNumber,
+          goToPage: (n) => {
+            viewer.currentPageNumber = n;
+          },
+          pageTexts: () =>
+            (texts ??= (async () => {
+              const out: string[] = [];
+              for (let n = 1; n <= pdf.numPages; n++) {
+                const content = await (await pdf.getPage(n)).getTextContent();
+                out.push(content.items.map((it) => (it.str ?? "") + (it.hasEOL ? "\n" : "")).join(""));
+              }
+              return out;
+            })()),
+          textLayer: (n) => container.current?.querySelector<HTMLElement>(`.page[data-page-number="${n}"] .textLayer`) ?? null,
+          scroller: () => container.current,
+        });
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't open the PDF.");
       }
@@ -74,10 +111,13 @@ export function PdfViewer({ url, title }: { url: string; title: string }) {
 
     return () => {
       cancelled = true;
+      onReady?.(null);
       resize.disconnect();
       destroy?.();
       viewerRef.current = null;
     };
+    // onReady is only read when the document opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
   const zoom = (factor: number) => {

@@ -1,8 +1,10 @@
 "use client";
 
-import { Download, ExternalLink, FileText, Globe, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { PdfViewer } from "./pdf-viewer";
+import { Download, ExternalLink, FileText, Globe, Volume2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PdfViewer, type PdfApi } from "./pdf-viewer";
+import { indexText } from "./read-aloud/dom";
+import { ReadAloud, type ReadSource } from "./read-aloud/read-aloud";
 
 export type ReaderTab = {
   key: "pdf" | "link";
@@ -15,6 +17,90 @@ export type ReaderTab = {
 };
 
 const WIDTH_KEY = "rp:reader-width";
+
+/** In the web page reader: the byline and notices aren't read aloud. */
+const WEB_SKIP = ".meta, .notice";
+
+/** Read aloud from the PDF viewer: text from pdf.js, selection and highlighting in its text layer. */
+function pdfSource(api: PdfApi): ReadSource {
+  return {
+    async all() {
+      const texts = await api.pageTexts();
+      const from = Math.min(Math.max(api.currentPage(), 1), texts.length);
+      return { blocks: texts.slice(from - 1).map((text, i) => ({ text, page: from + i })), fromPage: from };
+    },
+    selection() {
+      const sel = window.getSelection();
+      const scroller = api.scroller();
+      if (!sel || sel.isCollapsed || !sel.rangeCount || !scroller?.contains(sel.anchorNode)) return null;
+      const range = sel.getRangeAt(0);
+      const page = Number((range.startContainer.parentElement?.closest(".page") as HTMLElement | null)?.dataset.pageNumber) || undefined;
+      return { text: sel.toString(), page, rect: range.getBoundingClientRect() };
+    },
+    async target(page) {
+      if (!page) return null;
+      let layer = api.textLayer(page);
+      if (!layer?.textContent) {
+        // Only pages near the view are rendered: go to the page and wait for its text.
+        api.goToPage(page);
+        for (let i = 0; i < 30 && !layer?.textContent; i++) {
+          await new Promise((r) => setTimeout(r, 100));
+          layer = api.textLayer(page);
+        }
+      }
+      const scroller = api.scroller();
+      return layer?.textContent && scroller ? { root: layer, win: window, scroller } : null;
+    },
+    subscribe(cb) {
+      const scroller = api.scroller();
+      document.addEventListener("selectionchange", cb);
+      scroller?.addEventListener("scroll", cb, { passive: true });
+      return () => {
+        document.removeEventListener("selectionchange", cb);
+        scroller?.removeEventListener("scroll", cb);
+      };
+    },
+    clearSelection() {
+      window.getSelection()?.removeAllRanges();
+    },
+  };
+}
+
+/** Read aloud from the web page reader (a same-origin, script-free iframe). */
+function webSource(frame: HTMLIFrameElement): ReadSource | null {
+  const doc = frame.contentDocument;
+  const win = frame.contentWindow;
+  if (!doc?.body || !win) return null;
+  return {
+    async all() {
+      const blocks = indexText(doc.body, WEB_SKIP)
+        .text.split("\n")
+        .map((text) => ({ text }));
+      return { blocks };
+    },
+    selection() {
+      const sel = win.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+      const r = sel.getRangeAt(0).getBoundingClientRect();
+      const f = frame.getBoundingClientRect();
+      return { text: sel.toString(), rect: new DOMRect(r.left + f.left, r.top + f.top, r.width, r.height) };
+    },
+    async target() {
+      return { root: doc.body, win, scroller: win, skip: WEB_SKIP };
+    },
+    subscribe(cb) {
+      doc.addEventListener("selectionchange", cb);
+      win.addEventListener("scroll", cb, { passive: true });
+      return () => {
+        doc.removeEventListener("selectionchange", cb);
+        win.removeEventListener("scroll", cb);
+      };
+    },
+    clearSelection() {
+      win.getSelection()?.removeAllRanges();
+    },
+  };
+}
 const MIN_WIDTH = 360;
 
 function clampWidth(w: number) {
@@ -52,6 +138,11 @@ export function ReaderPanel({
   const [theme, setTheme] = useState("light");
   const panel = useRef<HTMLDivElement>(null);
   const tab = tabs.find((t) => t.key === active) ?? tabs[0];
+  const [listening, setListening] = useState(false);
+  const [pdfApi, setPdfApi] = useState<PdfApi | null>(null);
+  // The web page iframe, set each time it finishes loading (a new object, so the source is rebuilt).
+  const [loadedFrame, setLoadedFrame] = useState<{ el: HTMLIFrameElement } | null>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
 
   // Reserve room for the panel while it is open.
   useEffect(() => {
@@ -92,6 +183,21 @@ export function ReaderPanel({
   }
 
   const src = tab.key === "link" ? `${tab.src}?theme=${theme}` : tab.src;
+
+  // When the page opens with the web page showing, the iframe can finish
+  // loading before React attaches onLoad; pick that up here.
+  useEffect(() => {
+    const el = frame.current;
+    const doc = el?.contentDocument;
+    if (el && doc?.readyState === "complete" && doc.URL.includes("/api/reader/")) {
+      setLoadedFrame({ el });
+    }
+  }, [src]);
+
+  const source = useMemo<ReadSource | null>(() => {
+    if (tab.key === "pdf") return pdfApi ? pdfSource(pdfApi) : null;
+    return loadedFrame ? webSource(loadedFrame.el) : null;
+  }, [tab.key, pdfApi, loadedFrame]);
 
   return (
     <aside
@@ -135,6 +241,17 @@ export function ReaderPanel({
         <p className="min-w-0 flex-1 truncate text-sm text-ink" title={title}>
           {title}
         </p>
+        <button
+          type="button"
+          onClick={() => setListening((l) => !l)}
+          aria-pressed={listening}
+          aria-label="Listen"
+          title="Read aloud"
+          className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors ${listening ? "bg-accent-soft text-ink" : "text-muted hover:bg-accent-soft hover:text-ink"}`}
+        >
+          <Volume2 size={16} aria-hidden="true" className={listening ? "text-accent" : undefined} />
+          <span className="hidden sm:inline">Listen</span>
+        </button>
         <a href={tab.openUrl} target="_blank" rel="noopener noreferrer" title="Open in a new tab" aria-label="Open in a new tab" className="rounded-md p-1.5 text-muted hover:bg-accent-soft hover:text-ink">
           <ExternalLink size={16} aria-hidden="true" />
         </a>
@@ -150,11 +267,12 @@ export function ReaderPanel({
 
       <div className={`flex min-h-0 flex-1 flex-col ${dragging ? "pointer-events-none select-none" : ""}`}>
         {tab.key === "pdf" ? (
-          <PdfViewer key={src} url={src} title={title} />
+          <PdfViewer key={src} url={src} title={title} onReady={setPdfApi} />
         ) : (
-          <iframe key={src} src={src} title={`${tab.label}: ${title}`} className={`min-h-0 w-full flex-1 ${tab.key === "link" ? (theme === "dark" ? "bg-black" : "bg-white") : "bg-surface"}`} />
+          <iframe ref={frame} onLoad={(e) => setLoadedFrame({ el: e.currentTarget })} key={src} src={src} title={`${tab.label}: ${title}`} className={`min-h-0 w-full flex-1 ${tab.key === "link" ? (theme === "dark" ? "bg-black" : "bg-white") : "bg-surface"}`} />
         )}
       </div>
+      <ReadAloud key={src} source={source} open={listening} onOpenChange={setListening} />
     </aside>
   );
 }

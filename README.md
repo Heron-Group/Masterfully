@@ -304,6 +304,20 @@ filters is retried on another.
 
 **Edit the prompts** in [lib/ai/prompts.ts](lib/ai/prompts.ts).
 
+### Reading aloud
+
+The reading panel's **Listen** button reads a PDF or web page aloud: select
+text and press **Read aloud**, or **Read all** (for a PDF, from the page you're
+on). The listening time is shown before you start and counts down while it
+plays, and the sentence being read is highlighted.
+
+- **Device voice** (default): the browser's built-in voices. Free; quality
+  depends on the device (best on Apple devices and Edge's "Natural" voices).
+- **Natural voice (OpenAI)**: offered to anyone with an OpenAI key saved in
+  Settings, billed to that key. Each passage's audio is cached per user in
+  `CACHE_DIR/tts/`, so replaying it is free. The model defaults to
+  `gpt-4o-mini-tts`; set `OPENAI_TTS_MODEL` to change it.
+
 ---
 
 ## Tests

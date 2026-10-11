@@ -212,3 +212,7 @@ body {
 /* App shell: the phone top bar's height, zero once the sidebar shows. */
 .app-shell { --header-height: calc(3rem + 1px + env(safe-area-inset-top)); }
 @media (min-width: 768px) { .app-shell { --header-height: 0px; } }
+
+/* The sentence being read aloud (CSS Custom Highlight API; see components/read-aloud). */
+::highlight(rp-reading) { background-color: rgba(255, 74, 0, 0.22); }
+[data-theme="dark"] ::highlight(rp-reading) { background-color: rgba(255, 74, 0, 0.38); }
