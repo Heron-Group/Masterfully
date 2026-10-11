@@ -76,15 +76,20 @@ test("AI provider and API key in Settings", async ({ page }) => {
   expect(stored).not.toContain("secret-9876");
   expect(JSON.parse(stored).provider).toBe("openai");
 
-  // A different model is kept after a reload; Claude keeps its own settings.
+  // A model typed in ("Other…") is kept after a reload and listed; Claude keeps its own.
+  await page.getByLabel("Model").selectOption("__other");
   await page.getByLabel("Model").fill("gpt-5.5-mini");
   await page.getByLabel("Model").press("Enter");
-  await expect(page.getByRole("button", { name: /Use the default/ })).toBeVisible();
   await expect.poll(() => JSON.parse(readFileSync(secretFile, "utf8")).models?.openai).toBe("gpt-5.5-mini");
   await page.reload();
   await expect(page.getByLabel("Model")).toHaveValue("gpt-5.5-mini");
   await page.getByRole("radio", { name: "Claude" }).click();
   await expect(page.getByLabel("Model")).toHaveValue("claude-opus-5-5");
+  // The dropdown offers Claude models to choose from.
+  await page.getByLabel("Model").selectOption("claude-sonnet-5-5");
+  await expect.poll(() => JSON.parse(readFileSync(secretFile, "utf8")).models?.anthropic).toBe("claude-sonnet-5-5");
+  await page.reload();
+  await expect(page.getByLabel("Model")).toHaveValue("claude-sonnet-5-5");
   await expect(page.getByLabel("Claude API key")).toBeVisible();
 
   // Remove the OpenAI key, with a confirmation.

@@ -2,9 +2,12 @@ import { Download } from "lucide-react";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ThemeSetting } from "@/components/theme-setting";
 import { ui } from "@/components/ui";
+import { getUsage } from "@/lib/ai/usage";
 import { getAiSettings } from "@/lib/ai/user-config";
 import { requireSession } from "@/lib/auth";
+import { getWorkspaceStore } from "@/lib/content";
 import { AiSettings } from "./ai-settings";
+import { ResearchContextEditor } from "./research-context-editor";
 
 // The settings sections, shared by the settings window (opened from the
 // sidebar) and the /settings page. `heading` is false in the window, which
@@ -62,7 +65,7 @@ export function AppearanceSection({ heading = true }: Props) {
 
 export async function AiSection({ heading = true }: Props) {
   const account = await requireSession();
-  const ai = await getAiSettings(account.id);
+  const [ai, usage] = await Promise.all([getAiSettings(account.id), getUsage(account.id)]);
   return (
     <section id="ai" aria-labelledby="ai-heading" className="scroll-mt-8">
       <Heading id="ai-heading" show={heading}>
@@ -72,7 +75,24 @@ export async function AiSection({ heading = true }: Props) {
         Summaries are written by Claude or OpenAI using your own API key. The key is stored on the server,
         never in your notes, and only used when you ask for a summary.
       </p>
-      <AiSettings initial={ai} />
+      <AiSettings initial={ai} usage={usage} />
+    </section>
+  );
+}
+
+export async function ResearchSection({ heading = true }: Props) {
+  const account = await requireSession();
+  const { researchContext } = await (await getWorkspaceStore(account)).getSettings();
+  return (
+    <section aria-labelledby="research-heading">
+      <Heading id="research-heading" show={heading}>
+        Research context
+      </Heading>
+      <p className="mb-4 max-w-prose text-sm text-muted">
+        Your research question and focus, in a few sentences. Every AI summary is written with this in mind, so it can
+        say how a source relates to your work.
+      </p>
+      <ResearchContextEditor initial={researchContext} />
     </section>
   );
 }

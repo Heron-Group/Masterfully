@@ -88,6 +88,48 @@ test("link text to a source with Cmd/Ctrl+K, and insert one from the / menu", as
   await page.waitForURL(`**/library/${targetId}`);
 });
 
+test("right-click selected text to style it; clicking elsewhere closes pop-ups", async ({ page }) => {
+  await as(page, `/library/${sourceId}`);
+  const notes = page.getByRole("textbox", { name: "My notes" });
+  await setEditorText(page, notes, "Make this word bold.");
+  // Select "word" and right-click it.
+  await page.keyboard.press("End");
+  for (let i = 0; i < " bold.".length; i++) await page.keyboard.press("ArrowLeft");
+  for (let i = 0; i < "word".length; i++) await page.keyboard.press("Shift+ArrowLeft");
+  const box = await page.evaluate(() => {
+    const r = getSelection()!.getRangeAt(0).getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await page.mouse.click(box.x, box.y, { button: "right" });
+  const menu = page.getByRole("dialog", { name: "Format" });
+  await expect(menu.getByText("Turn into")).toBeVisible();
+  await menu.getByRole("option", { name: /^Bold/ }).click();
+  await expect(menu).toHaveCount(0);
+  await expect.poll(() => sourceFile(sourceId), { timeout: 10_000 }).toContain("Make this **word** bold.");
+
+  // The link pop-up closes when you click anywhere else.
+  await notes.click();
+  await page.keyboard.press("ControlOrMeta+k");
+  const picker = page.getByRole("dialog", { name: "Add a link" });
+  await expect(picker).toBeVisible();
+  await page.getByRole("heading", { name: "My notes" }).click();
+  await expect(picker).toHaveCount(0);
+});
+
+test("Settings: research context, and usage through Masterfully", async ({ page }) => {
+  await as(page, "/library");
+  await page.getByRole("button", { name: "Settings" }).filter({ visible: true }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("button", { name: "Research context" }).click();
+  await setEditorText(page, dialog.getByRole("textbox", { name: "Research context" }), `Graphic language in co-design ${stamp}`);
+  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible({ timeout: 10_000 });
+  const settingsFile = path.join(REPO_DIR, "users", ownerId(email), "settings.md");
+  expect(readFileSync(settingsFile, "utf8")).toContain(`Graphic language in co-design ${stamp}`);
+
+  await dialog.getByRole("button", { name: "AI summaries" }).click();
+  await expect(dialog.getByTestId("ai-usage")).toContainText("This month");
+});
+
 test("library and source show AI summarised and Annotated", async ({ page }) => {
   await as(page, `/library/${targetId}`);
   const details = page.locator("header").filter({ has: page.getByLabel("Title", { exact: true }) });
@@ -105,4 +147,10 @@ test("library and source show AI summarised and Annotated", async ({ page }) => 
   await expect(row.getByText("Annotated")).toBeVisible();
   const other = page.getByRole("listitem").filter({ hasText: `Notes test ${stamp}` });
   await expect(other.getByText("Annotated")).toHaveCount(0);
+
+  // That summary is counted in Settings.
+  await page.getByRole("button", { name: "Settings" }).filter({ visible: true }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("button", { name: "AI summaries" }).click();
+  await expect(dialog.getByTestId("ai-usage")).toContainText(/This month\s*1 request/);
 });

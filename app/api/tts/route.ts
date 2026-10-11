@@ -4,6 +4,7 @@ import path from "node:path";
 import OpenAI from "openai";
 import { fakeAiEnabled } from "@/lib/ai/client";
 import { describeError } from "@/lib/ai/providers";
+import { recordUsage } from "@/lib/ai/usage";
 import { getProviderKey } from "@/lib/ai/user-config";
 import { currentAccount } from "@/lib/auth";
 import { serverConfig } from "@/lib/config";
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "The natural voice needs an OpenAI API key in Settings → AI summaries." }, { status: 400 });
   }
   if (fakeAiEnabled()) {
+    await recordUsage(account.id, { provider: "openai", model: "fake-voice", speechChars: text.length });
     return new Response(new Uint8Array(silentWav(0.3)), { headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store" } });
   }
 
@@ -75,6 +77,7 @@ export async function POST(request: Request) {
       { signal: request.signal },
     );
     const audio = Buffer.from(await speech.arrayBuffer());
+    await recordUsage(account.id, { provider: "openai", model: MODEL, speechChars: text.length });
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, audio).catch(() => {});
     return new Response(new Uint8Array(audio), { headers });

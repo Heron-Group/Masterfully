@@ -9,7 +9,7 @@ import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref
 import { LinkPicker, SlashMenu, type Anchor, type LinkTarget } from "./editor-popovers";
 import { formatKeymap } from "./format-commands";
 import { liveMarkdown } from "./live-markdown";
-import { closeSlash, filterCommands, removeSlashText, slashField, type SlashCommand } from "./slash";
+import { closeSlash, filterCommands, FORMAT_COMMANDS, removeSlashText, slashField, type SlashCommand } from "./slash";
 
 export type LiveEditorHandle = {
   focus: (at?: { x: number; y: number } | "end") => void;
@@ -57,6 +57,12 @@ export function LiveEditor({
   // The "/" menu (query typed after the "/", and where to show it).
   const [slash, setSlash] = useState<{ query: string; at: Anchor } | null>(null);
   const slashKeys = useRef<((key: string) => boolean) | null>(null);
+  // The styling menu for selected text (right-click).
+  const [formatAt, setFormatAt] = useState<Anchor | null>(null);
+  const formatOpen = useRef(false);
+  useEffect(() => {
+    formatOpen.current = !!formatAt;
+  }, [formatAt]);
   // The link picker: what it will replace, and where to show it.
   const [picker, setPicker] = useState<{ from: number; to: number; at: Anchor; mode: "source" | "link" } | null>(null);
   const openPickerRef = useRef<(mode: "source" | "link") => void>(() => {});
@@ -80,7 +86,8 @@ export function LiveEditor({
             keymap.of(
               ["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].map((key) => ({
                 key,
-                run: (v: EditorView) => !!v.state.field(slashField) && (slashKeys.current?.(key) ?? false),
+                run: (v: EditorView) =>
+                  (!!v.state.field(slashField) || formatOpen.current) && (slashKeys.current?.(key) ?? false),
               })),
             ),
           ),
@@ -110,6 +117,15 @@ export function LiveEditor({
             if (update.focusChanged && !update.view.hasFocus) callbacks.current.onBlur?.();
           }),
           EditorView.domEventHandlers({
+            // Right-click on selected text: the styling menu instead of the browser's.
+            contextmenu: (event, v) => {
+              const sel = v.state.selection.main;
+              const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
+              if (sel.empty || pos === null || pos < sel.from || pos > sel.to) return false;
+              event.preventDefault();
+              setFormatAt({ left: event.clientX, top: event.clientY, bottom: event.clientY });
+              return true;
+            },
             // Cmd/Ctrl-click a link to open it (a plain click places the cursor to edit).
             click: (event) => {
               if (!(event.metaKey || event.ctrlKey)) return false;
@@ -202,6 +218,24 @@ export function LiveEditor({
     view.current?.dispatch({ effects: closeSlash.of(null) });
   }, []);
 
+  const pickFormat = useCallback(
+    (command: SlashCommand) => {
+      const editor = view.current;
+      setFormatAt(null);
+      if (!editor) return;
+      if (command.id === "source" || command.id === "link") openPicker(command.id === "source" ? "source" : "link");
+      else {
+        command.run?.(editor);
+        editor.focus();
+      }
+    },
+    [openPicker],
+  );
+  const closeFormatMenu = useCallback(() => {
+    setFormatAt(null);
+    view.current?.focus();
+  }, []);
+
   useImperativeHandle(ref, () => ({
     focus(at) {
       const editor = view.current;
@@ -223,6 +257,9 @@ export function LiveEditor({
       <div ref={host} className={`live-editor prose-rp ${className}`} />
       {slash && (
         <SlashMenu at={slash.at} commands={filterCommands(slash.query)} onPick={pickCommand} onClose={closeSlashMenu} keysRef={slashKeys} />
+      )}
+      {formatAt && (
+        <SlashMenu at={formatAt} commands={FORMAT_COMMANDS} onPick={pickFormat} onClose={closeFormatMenu} keysRef={slashKeys} label="Format" />
       )}
       {picker && <LinkPicker at={picker.at} mode={picker.mode} onPick={applyLink} onClose={closePicker} />}
     </>

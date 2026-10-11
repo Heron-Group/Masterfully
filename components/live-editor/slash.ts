@@ -1,5 +1,6 @@
 import { EditorSelection, StateEffect, StateField, type EditorState, type TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
+import { toggleWrap } from "./format-commands";
 
 // The "/" menu (Notion style): typing "/" at the start of a line or after a
 // space opens it; the text typed after the "/" filters it. This file tracks
@@ -40,26 +41,49 @@ export type SlashCommand = {
   label: string;
   hint: string;
   keywords: string;
+  /** Shown as a heading above the first command of each group. */
+  group?: string;
   /** Edits the document; the "/query" text has already been removed. */
   run?: (view: EditorView) => void;
 };
 
 const PREFIX = /^(\s*)(#{1,6}\s+|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+|>\s?)?/;
 
-/** Make the current line a heading, list item, quote… (replacing any existing marker). */
+/**
+ * Make the current line, or every line in the selection, a paragraph,
+ * heading, list item, quote… (replacing any existing marker). Numbered
+ * lists are numbered 1, 2, 3…
+ */
 function setLinePrefix(prefix: string) {
   return (view: EditorView) => {
     const { state } = view;
-    const line = state.doc.lineAt(state.selection.main.head);
-    const m = line.text.match(PREFIX)!;
-    const from = line.from + m[1].length;
-    const to = from + (m[2]?.length ?? 0);
-    const cursor = state.selection.main.head - (to - from) + prefix.length;
+    const sel = state.selection.main;
+    const first = state.doc.lineAt(sel.from).number;
+    const last = state.doc.lineAt(sel.to).number;
+    const changes = [];
+    let n = 0;
+    for (let i = first; i <= last; i++) {
+      const line = state.doc.line(i);
+      if (first !== last && !line.text.trim()) continue; // leave blank lines between paragraphs
+      const m = line.text.match(PREFIX)!;
+      const from = line.from + m[1].length;
+      const insert = prefix === "1. " ? `${++n}. ` : prefix;
+      changes.push({ from, to: from + (m[2]?.length ?? 0), insert });
+    }
+    const tr = state.update({ changes, userEvent: "input.format" });
+    const head = tr.changes.mapPos(sel.head, 1);
     view.dispatch({
-      changes: { from, to, insert: prefix },
-      selection: EditorSelection.cursor(Math.max(cursor, from + prefix.length)),
+      changes,
+      selection: sel.empty ? EditorSelection.cursor(head) : EditorSelection.range(tr.changes.mapPos(sel.from, -1), tr.changes.mapPos(sel.to, 1)),
       userEvent: "input.format",
     });
+  };
+}
+
+/** Run an inline format (bold, italic…) on the selection. */
+function inline(marker: string) {
+  return (view: EditorView) => {
+    toggleWrap(marker)(view);
   };
 }
 
@@ -81,6 +105,7 @@ function insertBlock(text: (lineIsEmpty: boolean) => { insert: string; cursor: n
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
+  { id: "paragraph", label: "Paragraph", hint: "Plain text", keywords: "paragraph text plain normal body p", run: setLinePrefix("") },
   { id: "h1", label: "Heading 1", hint: "Large section heading", keywords: "title heading h1 big", run: setLinePrefix("# ") },
   { id: "h2", label: "Heading 2", hint: "Medium section heading", keywords: "title heading h2 subtitle", run: setLinePrefix("## ") },
   { id: "h3", label: "Heading 3", hint: "Small section heading", keywords: "title heading h3 small", run: setLinePrefix("### ") },
@@ -104,6 +129,22 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     keywords: "code block pre monospace ```",
     run: insertBlock((empty) => (empty ? { insert: "```\n\n```", cursor: 4 } : { insert: "\n```\n\n```", cursor: 5 })),
   },
+];
+
+const TURN_INTO = "Turn into";
+
+/** The menu for selected text (right-click): text styles, links, and what the lines are. */
+export const FORMAT_COMMANDS: SlashCommand[] = [
+  { id: "bold", label: "Bold", hint: "⌘/Ctrl B", keywords: "bold strong", group: "Style", run: inline("**") },
+  { id: "italic", label: "Italic", hint: "⌘/Ctrl I", keywords: "italic emphasis", group: "Style", run: inline("*") },
+  { id: "strike", label: "Strikethrough", hint: "⌘/Ctrl Shift X", keywords: "strikethrough", group: "Style", run: inline("~~") },
+  { id: "inlinecode", label: "Code", hint: "⌘/Ctrl E", keywords: "code", group: "Style", run: inline("`") },
+  { id: "source", label: "Link to source", hint: "A source in your library", keywords: "source link", group: "Link" },
+  { id: "link", label: "Web link", hint: "⌘/Ctrl K", keywords: "link url", group: "Link" },
+  ...["paragraph", "h1", "h2", "h3", "bullet", "number", "todo", "quote"].map((id) => ({
+    ...SLASH_COMMANDS.find((c) => c.id === id)!,
+    group: TURN_INTO,
+  })),
 ];
 
 export function filterCommands(query: string): SlashCommand[] {

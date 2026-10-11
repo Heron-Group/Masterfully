@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ui } from "@/components/ui";
-import { AccountSection, AiSection, AppearanceSection, DataSection } from "./sections";
+import { AccountSection, AiSection, AppearanceSection, DataSection, ResearchSection } from "./sections";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -14,6 +14,7 @@ export default function SettingsPage() {
         <div className="space-y-12">
           <AccountSection />
           <AppearanceSection />
+          <ResearchSection />
           <AiSection />
           <DataSection />
         </div>

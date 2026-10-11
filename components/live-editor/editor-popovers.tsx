@@ -11,8 +11,12 @@ import {
   ListOrdered,
   ListTodo,
   Minus,
+  Pilcrow,
   Plus,
   Quote,
+  Strikethrough,
+  Bold,
+  Italic,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
@@ -29,9 +33,25 @@ function place(at: Anchor, height: number): CSSProperties {
     : { left, top: at.bottom + 4 };
 }
 
+/** Close a pop-up when the pointer goes down anywhere outside it. */
+function useClickOutside(ref: RefObject<HTMLElement | null>, onClose: () => void) {
+  useEffect(() => {
+    const down = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("pointerdown", down, true);
+    return () => document.removeEventListener("pointerdown", down, true);
+  }, [ref, onClose]);
+}
+
 const card = "fixed z-50 w-72 overflow-hidden rounded-lg bg-surface text-sm shadow-lg shadow-black/10 ring-1 ring-rule";
 
 const ICONS: Record<string, LucideIcon> = {
+  paragraph: Pilcrow,
+  bold: Bold,
+  italic: Italic,
+  strike: Strikethrough,
+  inlinecode: Code,
   h1: Heading1,
   h2: Heading2,
   h3: Heading3,
@@ -55,9 +75,11 @@ export function SlashMenu({
   onPick,
   onClose,
   keysRef,
+  label = "Insert",
 }: {
   at: Anchor;
   commands: SlashCommand[];
+  label?: string;
   onPick: (command: SlashCommand) => void;
   onClose: () => void;
   keysRef: RefObject<((key: string) => boolean) | null>;
@@ -69,6 +91,8 @@ export function SlashMenu({
     setActive(0);
   }
   const list = useRef<HTMLUListElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useClickOutside(box, onClose);
 
   useEffect(() => {
     keysRef.current = (key) => {
@@ -90,13 +114,19 @@ export function SlashMenu({
   }, [active]);
 
   return (
-    <div className={card} style={place(at, 320)} role="dialog" aria-label="Insert">
+    <div ref={box} className={card} style={place(at, 320)} role="dialog" aria-label={label}>
       {commands.length ? (
-        <ul ref={list} role="listbox" aria-label="Insert" className="max-h-80 overflow-y-auto p-1">
+        <ul ref={list} role="listbox" aria-label={label} className="max-h-80 overflow-y-auto p-1">
           {commands.map((c, i) => {
             const Icon = ICONS[c.id] ?? Plus;
+            const heading = c.group && c.group !== commands[i - 1]?.group ? c.group : null;
             return (
               <li key={c.id} data-index={i} role="option" aria-selected={i === active}>
+                {heading && (
+                  <p aria-hidden="true" className={`px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-faint ${i ? "pt-2" : "pt-1"}`}>
+                    {heading}
+                  </p>
+                )}
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()} // keep the editor focused
@@ -167,6 +197,8 @@ export function LinkPicker({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useClickOutside(box, onClose);
 
   useEffect(() => {
     void loadSources(true).then(setSources);
@@ -211,7 +243,7 @@ export function LinkPicker({
   }
 
   return (
-    <div className={card} style={place(at, 360)} role="dialog" aria-label={mode === "source" ? "Link to source" : "Add a link"}>
+    <div ref={box} className={card} style={place(at, 360)} role="dialog" aria-label={mode === "source" ? "Link to source" : "Add a link"}>
       <div className="border-b border-rule p-2">
         <input
           ref={input}

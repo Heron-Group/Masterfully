@@ -5,15 +5,16 @@ import type { AiEvent } from "../dto";
 import { modelOptions } from "./client";
 import { fakeRefuses, fakeStream } from "./fake";
 import { SYSTEM_PROMPT } from "./prompts";
+import { recordUsage } from "./usage";
 import { PROVIDER_LABELS, type AiCredentials } from "./user-config";
 
 /** One request's input, independent of provider. */
 export type Part = { type: "text"; text: string } | { type: "pdf"; data: Buffer };
-export type RunResult = { text: string; model: string; truncated: boolean };
+export type RunResult = { text: string; model: string; truncated: boolean; inputTokens: number; outputTokens: number };
 export type RunOptions = { signal?: AbortSignal; quiet?: boolean; maxTokens?: number };
 
-/** The provider to call: a user's own key, or the development fake. */
-export type AiBackend = AiCredentials | { provider: "fake" };
+/** The provider to call: a user's own key, or the development fake. `userId` is for recording usage. */
+export type AiBackend = (AiCredentials | { provider: "fake" }) & { userId?: string };
 
 export class AiError extends Error {
   constructor(
@@ -30,9 +31,19 @@ export class AiError extends Error {
  * which are combined afterwards).
  */
 export async function* runModel(backend: AiBackend, parts: Part[], opts: RunOptions): AsyncGenerator<AiEvent, RunResult> {
-  if (backend.provider === "fake") return yield* runFake(parts, opts);
-  if (backend.provider === "openai") return yield* runOpenAI(backend, parts, opts);
-  return yield* runClaude(backend, parts, opts);
+  const result =
+    backend.provider === "fake"
+      ? yield* runFake(parts, opts)
+      : backend.provider === "openai"
+        ? yield* runOpenAI(backend, parts, opts)
+        : yield* runClaude(backend, parts, opts);
+  await recordUsage(backend.userId, {
+    provider: backend.provider,
+    model: result.model,
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
+  });
+  return result;
 }
 
 async function* runFake(parts: Part[], opts: RunOptions): AsyncGenerator<AiEvent, RunResult> {
@@ -43,7 +54,8 @@ async function* runFake(parts: Part[], opts: RunOptions): AsyncGenerator<AiEvent
     text += delta;
     if (!opts.quiet) yield { type: "delta", text: delta };
   }
-  return { text, model: "fake-model", truncated: false };
+  // Rough token counts (about four characters a token), so usage shows up in development.
+  return { text, model: "fake-model", truncated: false, inputTokens: Math.ceil(prompt.length / 4), outputTokens: Math.ceil(text.length / 4) };
 }
 
 async function* runClaude(cred: AiCredentials, parts: Part[], opts: RunOptions): AsyncGenerator<AiEvent, RunResult> {
@@ -84,7 +96,14 @@ async function* runClaude(cred: AiCredentials, parts: Part[], opts: RunOptions):
     .flatMap((b) => (b.type === "text" ? [b.text] : []))
     .join("")
     .trim();
-  return { text, model: final.model, truncated: final.stop_reason === "max_tokens" };
+  const usage = final.usage;
+  return {
+    text,
+    model: final.model,
+    truncated: final.stop_reason === "max_tokens",
+    inputTokens: (usage?.input_tokens ?? 0) + (usage?.cache_creation_input_tokens ?? 0) + (usage?.cache_read_input_tokens ?? 0),
+    outputTokens: usage?.output_tokens ?? 0,
+  };
 }
 
 async function* runOpenAI(cred: AiCredentials, parts: Part[], opts: RunOptions): AsyncGenerator<AiEvent, RunResult> {
@@ -116,6 +135,8 @@ async function* runOpenAI(cred: AiCredentials, parts: Part[], opts: RunOptions):
     text: final.output_text.trim(),
     model: final.model,
     truncated: final.status === "incomplete" && final.incomplete_details?.reason === "max_output_tokens",
+    inputTokens: final.usage?.input_tokens ?? 0,
+    outputTokens: final.usage?.output_tokens ?? 0,
   };
 }
 

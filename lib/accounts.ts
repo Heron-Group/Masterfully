@@ -35,6 +35,8 @@ export const USERS_DIR = "users";
 export const ACCOUNT_FILE = "account.md";
 /** The user's encrypted AI key and provider settings (see lib/ai/user-config.ts). */
 export const AI_KEY_FILE = "ai-key.json";
+/** What the user has used through Masterfully (requests, tokens, speech), per month. */
+export const AI_USAGE_FILE = "ai-usage.json";
 
 /** Content from the single-user version, at the repository root. */
 const LEGACY_PATHS = ["journal", "sources", "groups", "attachments", "settings.md"];

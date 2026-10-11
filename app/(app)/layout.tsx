@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { NavLinks, NavList } from "@/components/nav-links";
 import { SettingsProvider } from "@/components/settings-dialog";
-import { AccountSection, AiSection, AppearanceSection, DataSection } from "./settings/sections";
+import { AccountSection, AiSection, AppearanceSection, DataSection, ResearchSection } from "./settings/sections";
 
 const loading = <p className="text-sm text-faint">Loading…</p>;
 
@@ -14,6 +14,11 @@ const settingsSections = {
     </Suspense>
   ),
   appearance: <AppearanceSection heading={false} />,
+  research: (
+    <Suspense fallback={loading}>
+      <ResearchSection heading={false} />
+    </Suspense>
+  ),
   ai: (
     <Suspense fallback={loading}>
       <AiSection heading={false} />

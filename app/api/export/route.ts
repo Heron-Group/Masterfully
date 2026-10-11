@@ -1,13 +1,13 @@
 import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
 import { Zip, ZipDeflate, ZipPassThrough } from "fflate";
-import { ACCOUNT_FILE, AI_KEY_FILE } from "@/lib/accounts";
+import { ACCOUNT_FILE, AI_KEY_FILE, AI_USAGE_FILE } from "@/lib/accounts";
 import { errorResponse } from "@/lib/api";
 import { currentAccount } from "@/lib/auth";
 import { getWorkspaceStore } from "@/lib/content";
 
-/** Kept out of the download: the app's record of the account, and the encrypted API key. */
-const PRIVATE = new Set([ACCOUNT_FILE, AI_KEY_FILE]);
+/** Kept out of the download: the app's own records (account, encrypted API key, usage). */
+const PRIVATE = new Set([ACCOUNT_FILE, AI_KEY_FILE, AI_USAGE_FILE]);
 
 /** Every file in a folder, depth first, skipping hidden files and folders. */
 async function* walk(dir: string, rel = ""): AsyncGenerator<{ abs: string; rel: string; mtime: Date }> {

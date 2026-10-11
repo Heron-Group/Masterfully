@@ -1,13 +1,14 @@
 "use client";
 
-import { Download, Palette, Sparkles, UserRound, X, type LucideIcon } from "lucide-react";
+import { Compass, Download, Palette, Sparkles, UserRound, X, type LucideIcon } from "lucide-react";
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-export type SettingsSection = "account" | "appearance" | "ai" | "data";
+export type SettingsSection = "account" | "appearance" | "research" | "ai" | "data";
 
 const SECTIONS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
   { id: "account", label: "Account", icon: UserRound },
   { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "research", label: "Research context", icon: Compass },
   { id: "ai", label: "AI summaries", icon: Sparkles },
   { id: "data", label: "Your data", icon: Download },
 ];

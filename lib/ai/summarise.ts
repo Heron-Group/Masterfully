@@ -18,8 +18,9 @@ const NOT_CONFIGURED = "Add your Claude or OpenAI API key in Settings to generat
 
 /** The provider to use for a user: their own key, or the fake in development. */
 export async function backendFor(userId: string): Promise<AiBackend | null> {
-  if (fakeAiEnabled()) return { provider: "fake" };
-  return getAiCredentials(userId);
+  if (fakeAiEnabled()) return { provider: "fake", userId };
+  const credentials = await getAiCredentials(userId);
+  return credentials && { ...credentials, userId };
 }
 
 function run(parts: Part[], opts: Opts) {

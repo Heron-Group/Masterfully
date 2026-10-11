@@ -5,7 +5,7 @@ import { EditorSelection, type StateCommand } from "@codemirror/state";
  * Markdown markers, or removes them if the selection is already wrapped;
  * with no selection it inserts the pair and puts the cursor between.
  */
-function toggleWrap(marker: string): StateCommand {
+export function toggleWrap(marker: string): StateCommand {
   return ({ state, dispatch }) => {
     const len = marker.length;
     const change = state.changeByRange((range) => {

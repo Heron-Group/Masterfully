@@ -2,10 +2,11 @@
 
 import { ExternalLink, KeyRound, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { ui } from "@/components/ui";
+import type { UsageSummary, UsageTotals } from "@/lib/ai/usage";
 import type { AiProvider, AiSettingsView } from "@/lib/ai/user-config";
-import { saveAiSettings } from "./actions";
+import { listModels, saveAiSettings, type ModelOption } from "./actions";
 
 const PROVIDERS: { id: AiProvider; label: string; keyUrl: string; keyPlaceholder: string }[] = [
   { id: "anthropic", label: "Claude", keyUrl: "https://console.anthropic.com/settings/keys", keyPlaceholder: "sk-ant-…" },
@@ -14,7 +15,9 @@ const PROVIDERS: { id: AiProvider; label: string; keyUrl: string; keyPlaceholder
 
 const DEFAULTS: Record<AiProvider, string> = { anthropic: "claude-opus-5-5", openai: "gpt-5.5" };
 
-export function AiSettings({ initial }: { initial: AiSettingsView }) {
+const OTHER = "__other";
+
+export function AiSettings({ initial, usage }: { initial: AiSettingsView; usage: UsageSummary }) {
   const router = useRouter();
   const [settings, setSettings] = useState(initial);
   const [shown, setShown] = useState<AiProvider>(initial.provider ?? "anthropic");
@@ -22,11 +25,28 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [keyInput, setKeyInput] = useState("");
   const [model, setModel] = useState(initial.models[shown]);
+  const [lists, setLists] = useState<Partial<Record<AiProvider, { models: ModelOption[]; live: boolean }>>>({});
+  const [typing, setTyping] = useState(false); // "Other…": type a model name
   const [message, setMessage] = useState<{ kind: "error" | "info"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const provider = PROVIDERS.find((p) => p.id === shown)!;
   const key = settings.keys[shown];
+
+  // The provider's model list (with the saved key), refreshed when the key changes.
+  const keyHint = key?.hint;
+  useEffect(() => {
+    let cancelled = false;
+    void listModels(shown).then((list) => {
+      if (!cancelled) setLists((l) => ({ ...l, [shown]: list }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shown, keyHint]);
+  const list = lists[shown];
+  const options = list ? [...list.models] : [];
+  if (model && !options.some((o) => o.id === model)) options.unshift({ id: model, label: model });
   const active = settings.provider === shown && !!key?.readable;
 
   function save(update: { provider: AiProvider; model?: string; apiKey?: string }, done?: () => void) {
@@ -48,6 +68,7 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
     if (id === shown && settings.provider === id) return;
     setShown(id);
     setModel(settings.models[id]);
+    setTyping(false);
     setReplacing(false);
     setConfirmRemove(false);
     setKeyInput("");
@@ -178,30 +199,52 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
           <label htmlFor="ai-model" className={ui.label}>
             Model
           </label>
-          <input
-            id="ai-model"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            onBlur={saveModel}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-            placeholder={DEFAULTS[shown]}
-            spellCheck={false}
-            className={`${ui.input} font-mono text-[13px]`}
-          />
-          {model.trim() !== DEFAULTS[shown] && (
-            <button
-              type="button"
-              onClick={() => {
-                setModel(DEFAULTS[shown]);
-                save({ provider: shown, model: DEFAULTS[shown] });
+          {typing ? (
+            <>
+              <input
+                id="ai-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                onBlur={saveModel}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                placeholder={DEFAULTS[shown]}
+                spellCheck={false}
+                autoFocus
+                className={`${ui.input} font-mono text-[13px]`}
+              />
+              <button type="button" onClick={() => setTyping(false)} className="mt-1 text-xs text-muted hover:text-ink">
+                Choose from the list
+              </button>
+            </>
+          ) : (
+            <select
+              id="ai-model"
+              value={model}
+              disabled={!list}
+              onChange={(e) => {
+                if (e.target.value === OTHER) return setTyping(true);
+                setModel(e.target.value);
+                if (e.target.value !== settings.models[shown]) save({ provider: shown, model: e.target.value });
               }}
-              className="mt-1 text-xs text-muted hover:text-ink"
+              className={`${ui.input} text-[14px]`}
             >
-              Use the default ({DEFAULTS[shown]})
-            </button>
+              {!list && <option value={model}>{model}</option>}
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label === o.id ? o.id : `${o.label} (${o.id})`}
+                  {o.id === DEFAULTS[shown] ? " · default" : ""}
+                </option>
+              ))}
+              <option value={OTHER}>Other…</option>
+            </select>
           )}
+          <p className="mt-1 text-xs text-faint">
+            {list?.live
+              ? `The models your ${provider.label} key can use.`
+              : `Suggested models. Save your key to see every model available to you.`}
+          </p>
         </div>
       </div>
 
@@ -213,6 +256,55 @@ export function AiSettings({ initial }: { initial: AiSettingsView }) {
             Ready. Summaries use {provider.label} ({settings.models[shown]}), billed to your key.
           </span>
         ) : null}
+      </p>
+
+      <Usage usage={usage} />
+    </div>
+  );
+}
+
+const fmt = (n: number) =>
+  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 10_000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+
+function line(t: UsageTotals): string {
+  const parts: string[] = [];
+  if (t.requests) parts.push(`${t.requests} request${t.requests === 1 ? "" : "s"} · ${fmt(t.inputTokens)} tokens in · ${fmt(t.outputTokens)} out`);
+  if (t.speechRequests) parts.push(`read aloud ${fmt(t.speechChars)} characters`);
+  return parts.join(" · ") || "Nothing yet";
+}
+
+/** What has been used through Masterfully; the cost is on the provider's dashboard. */
+function Usage({ usage }: { usage: UsageSummary }) {
+  return (
+    <div className="rounded-lg bg-accent-soft/40 px-4 py-3 text-sm" data-testid="ai-usage">
+      <p className="mb-2 font-medium text-ink">Your usage through Masterfully</p>
+      <dl className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-1">
+        <dt className="text-muted">This month</dt>
+        <dd className="tabular-nums">{line(usage.thisMonth)}</dd>
+        <dt className="text-muted">Last month</dt>
+        <dd className="tabular-nums">{line(usage.lastMonth)}</dd>
+        <dt className="text-muted">All time</dt>
+        <dd className="tabular-nums">{line(usage.allTime)}</dd>
+      </dl>
+      {usage.byModel.length > 0 && (
+        <ul className="mt-2 space-y-0.5 border-t border-rule pt-2 text-xs text-muted">
+          {usage.byModel.map((m) => (
+            <li key={`${m.provider}:${m.model}`} className="tabular-nums">
+              <span className="font-mono">{m.model}</span> — {line(m)}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2 text-xs text-faint">
+        Costs depend on each model&apos;s current prices. See exact charges in the{" "}
+        <a href="https://console.anthropic.com/settings/usage" target="_blank" rel="noreferrer" className="underline hover:text-ink">
+          Anthropic Console
+        </a>{" "}
+        or{" "}
+        <a href="https://platform.openai.com/usage" target="_blank" rel="noreferrer" className="underline hover:text-ink">
+          OpenAI dashboard
+        </a>
+        .
       </p>
     </div>
   );
