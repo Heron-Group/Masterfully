@@ -723,6 +723,24 @@ export class ContentStore {
     });
   }
 
+  /**
+   * Sources and notes whose text links to this source ([text](/library/<id>)),
+   * for "Referenced by" on its page. A source doesn't count as referencing itself.
+   */
+  async referencesTo(id: string): Promise<Array<{ kind: "source" | "note"; id: string; title: string }>> {
+    await this.refresh();
+    const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const link = new RegExp(`\\]\\(\\s*/library/${escaped}(?=[\\s)#?])`);
+    const out: Array<{ kind: "source" | "note"; id: string; title: string }> = [];
+    for (const s of this.sources.values()) {
+      if (s.id !== id && link.test(s.body)) out.push({ kind: "source", id: s.id, title: s.title });
+    }
+    for (const n of this.notes.values()) {
+      if (link.test(n.body)) out.push({ kind: "note", id: n.id, title: n.title });
+    }
+    return out.sort((a, b) => (a.kind === b.kind ? a.title.localeCompare(b.title) : a.kind === "source" ? -1 : 1));
+  }
+
   private requireSource(id: string): Source {
     const source = this.sources.get(id);
     if (!source) throw new ContentError("Source not found", 404);

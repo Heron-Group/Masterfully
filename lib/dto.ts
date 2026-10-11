@@ -75,6 +75,9 @@ export type SourceDto = {
 
 export type GroupRefDto = { id: string; title: string };
 
+/** A source or note that links to a source. */
+export type ReferenceDto = { kind: "source" | "note"; id: string; title: string };
+
 export function formatAuthors(authors: string[]): string {
   if (authors.length <= 3) return authors.join("; ");
   return `${authors.slice(0, 3).join("; ")} et al.`;

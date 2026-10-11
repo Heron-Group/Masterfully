@@ -1,6 +1,7 @@
 "use client";
 
-import { BookOpen, Download, FilePlus2, FileText, Globe, Link2, Pencil, Trash2, X } from "lucide-react";
+import { BookOpen, Download, FilePlus2, FileText, Globe, Link2, Pencil, StickyNote, Trash2, X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 import { InlineAutoText, InlineSelectText, InlineTitle, useInlineSave } from "@/components/inline-fields";
@@ -11,7 +12,7 @@ import { ReaderPanel, type ReaderTab } from "@/components/reader-panel";
 import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
 import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
-import { MAX_UPLOAD_BYTES, SOURCE_TYPE_OPTIONS, type GroupRefDto, type SourceDto, type SourcePdfDto, type SourceType } from "@/lib/dto";
+import { MAX_UPLOAD_BYTES, SOURCE_TYPE_OPTIONS, type GroupRefDto, type ReferenceDto, type SourceDto, type SourcePdfDto, type SourceType } from "@/lib/dto";
 import { formatShortDate } from "@/lib/time";
 import { upload } from "@/lib/upload-client";
 import { deleteSource, removeSourcePdf, saveSourceNotes, setSourceInGroup, setSourceLink, updateSourceProps, type ActionResult, type SourceProps } from "../actions";
@@ -55,10 +56,12 @@ function readerTabs(source: SourceDto): ReaderTab[] {
 export function SourceView({
   source,
   allGroups,
+  referencedBy = [],
   initialRead,
 }: {
   source: SourceDto;
   allGroups: GroupRefDto[];
+  referencedBy?: ReferenceDto[];
   initialRead?: ReadKind;
 }) {
   const tabs = readerTabs(source);
@@ -93,7 +96,7 @@ export function SourceView({
   return (
     <>
       <article className="mt-4 space-y-10">
-        <Details source={source} allGroups={allGroups} annotated={annotated} />
+        <Details source={source} allGroups={allGroups} annotated={annotated} referencedBy={referencedBy} />
         <MaterialSection source={source} reading={open} onRead={setReading} />
         <NotesSection source={source} onAnnotated={setAnnotated} />
         <SourceSummaryPanel source={source} />
@@ -113,7 +116,17 @@ function ErrorText({ result }: { result: ActionResult | null }) {
 }
 
 /** Title, then one quiet line of details (edited in place) with delete. */
-function Details({ source, allGroups, annotated }: { source: SourceDto; allGroups: GroupRefDto[]; annotated: boolean }) {
+function Details({
+  source,
+  allGroups,
+  annotated,
+  referencedBy,
+}: {
+  source: SourceDto;
+  allGroups: GroupRefDto[];
+  annotated: boolean;
+  referencedBy: ReferenceDto[];
+}) {
   const { save, label, isError } = useInlineSave();
   const update = (props: SourceProps) =>
     save(async () => {
@@ -166,12 +179,36 @@ function Details({ source, allGroups, annotated }: { source: SourceDto; allGroup
       <div className="mt-2.5">
         <SourceGroupTags source={source} allGroups={allGroups} />
       </div>
+      {referencedBy.length > 0 && <ReferencedBy items={referencedBy} />}
       {label && (
         <p role={isError ? "alert" : "status"} className={`mt-1 text-xs ${isError ? "text-danger" : "text-faint"}`}>
           {label}
         </p>
       )}
     </header>
+  );
+}
+
+/** Sources and notes that link to this source, as links to open them. */
+function ReferencedBy({ items }: { items: ReferenceDto[] }) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[13px]" role="group" aria-label="Referenced by">
+      <span className="mr-0.5 text-faint">Referenced by</span>
+      {items.map((r) => {
+        const Icon = r.kind === "source" ? BookOpen : StickyNote;
+        return (
+          <Link
+            key={`${r.kind}:${r.id}`}
+            href={r.kind === "source" ? `/library/${r.id}` : `/notes/${r.id}`}
+            title={r.kind === "source" ? "Open source" : "Open note"}
+            className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-md bg-accent-soft/70 px-2 py-1 text-ink transition-colors hover:bg-accent-soft"
+          >
+            <Icon size={13} strokeWidth={1.7} className="shrink-0 text-accent" aria-hidden="true" />
+            <span className="truncate">{r.title}</span>
+          </Link>
+        );
+      })}
+    </div>
   );
 }
 

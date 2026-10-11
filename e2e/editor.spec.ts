@@ -86,6 +86,12 @@ test("link text to a source with Cmd/Ctrl+K, and insert one from the / menu", as
   await page.keyboard.press("Escape"); // leave the editor so the link shows as a mention
   await mention.click({ modifiers: ["ControlOrMeta"] });
   await page.waitForURL(`**/library/${targetId}`);
+
+  // The target lists the source that links to it; click it to go back.
+  const refs = page.getByRole("group", { name: "Referenced by" });
+  await expect(refs.getByRole("link", { name: `Notes test ${stamp}` })).toBeVisible();
+  await refs.getByRole("link", { name: `Notes test ${stamp}` }).click();
+  await page.waitForURL(`**/library/${sourceId}`);
 });
 
 test("formatting marks stay hidden, even on the line being edited", async ({ page }) => {
@@ -163,8 +169,8 @@ test("library and source show AI summarised and Annotated", async ({ page }) => 
   await as(page, `/library/${targetId}`);
   const details = page.locator("header").filter({ has: page.getByLabel("Title", { exact: true }) });
   await expect(details.getByText("Annotated")).toHaveCount(0);
-  const words = Array.from({ length: 51 }, (_, i) => `word${i}`).join(" ");
-  await setEditorText(page, page.getByRole("textbox", { name: "My notes" }), words);
+  // One word is enough.
+  await setEditorText(page, page.getByRole("textbox", { name: "My notes" }), "Promising");
   await expect(details.getByText("Annotated")).toBeVisible(); // as soon as it's typed
 
   await page.getByRole("button", { name: "Summarise" }).click();
@@ -174,8 +180,12 @@ test("library and source show AI summarised and Annotated", async ({ page }) => 
   const row = page.getByRole("listitem").filter({ hasText: TARGET });
   await expect(row.getByText("AI summarised")).toBeVisible();
   await expect(row.getByText("Annotated")).toBeVisible();
+  // Any notes count; a source with none isn't annotated.
   const other = page.getByRole("listitem").filter({ hasText: `Notes test ${stamp}` });
-  await expect(other.getByText("Annotated")).toHaveCount(0);
+  await expect(other.getByText("Annotated")).toBeVisible();
+  const empty = page.getByRole("listitem").filter({ hasText: `Brand new ${stamp}` });
+  await expect(empty).toBeVisible();
+  await expect(empty.getByText("Annotated")).toHaveCount(0);
 
   // That summary is counted in Settings.
   await page.getByRole("button", { name: "Settings" }).filter({ visible: true }).first().click();

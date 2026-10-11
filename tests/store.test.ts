@@ -247,6 +247,22 @@ describe("sources and groups", () => {
     expect((await store.getSource(s.id))?.notes).toBe("Notes here");
   });
 
+  it("finds the sources and notes that link to a source", async () => {
+    const store = await makeStore();
+    const target = await store.createSource({ title: "Target" });
+    const lookalike = await store.createSource({ title: "Target 2" }); // id starts the same
+    const citing = await store.createSource({ title: "Citing", notes: `Builds on [the target](/library/${target.id}).` });
+    await store.createSource({ title: "Other", notes: `See [it](/library/${lookalike.id})` });
+    await store.setSourceNotes(target.id, `Self link [me](/library/${target.id})`);
+    await store.createNote({ title: "Workshop", text: `As [argued](/library/${target.id}) here.` });
+
+    expect(await store.referencesTo(target.id)).toEqual([
+      { kind: "source", id: citing.id, title: "Citing" },
+      { kind: "note", id: "workshop", title: "Workshop" },
+    ]);
+    expect((await store.referencesTo(lookalike.id)).map((r) => r.title)).toEqual(["Other"]);
+  });
+
   it("holds several PDFs and links; the first of each is the main one", async () => {
     const store = await makeStore();
     const first = await store.stageUpload(Buffer.from("%PDF-1"));

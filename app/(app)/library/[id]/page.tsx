@@ -35,13 +35,14 @@ async function SourceLoader({
   const { id } = await params;
   const read = (await searchParams).read;
   const store = await getContentStore();
-  const [source, groups] = await Promise.all([store.getSource(id), store.listGroups()]);
+  const [source, groups, referencedBy] = await Promise.all([store.getSource(id), store.listGroups(), store.referencesTo(id)]);
   if (!source) notFound();
   return (
     <SourceView
       key={source.id}
       source={sourceToDto(source, groups)}
       allGroups={groups.map((g) => ({ id: g.id, title: g.title }))}
+      referencedBy={referencedBy}
       initialRead={typeof read === "string" && /^(pdf|link)(-\d+)?$/.test(read) ? read : undefined}
     />
   );
