@@ -277,7 +277,7 @@ function line(t: UsageTotals): string {
 function Usage({ usage }: { usage: UsageSummary }) {
   return (
     <div className="rounded-lg bg-accent-soft/40 px-4 py-3 text-sm" data-testid="ai-usage">
-      <p className="mb-2 font-medium text-ink">Your usage through Masterfully</p>
+      <p className="mb-2 font-medium text-ink">Masterfully AI Usage</p>
       <dl className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-1">
         <dt className="text-muted">This month</dt>
         <dd className="tabular-nums">{line(usage.thisMonth)}</dd>
@@ -296,7 +296,7 @@ function Usage({ usage }: { usage: UsageSummary }) {
         </ul>
       )}
       <p className="mt-2 text-xs text-faint">
-        Costs depend on each model&apos;s current prices. See exact charges in the{" "}
+        See exact charges in the{" "}
         <a href="https://console.anthropic.com/settings/usage" target="_blank" rel="noreferrer" className="underline hover:text-ink">
           Anthropic Console
         </a>{" "}
