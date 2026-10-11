@@ -3,6 +3,7 @@
 import { FileText, Globe } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { isAnnotated, SourceBadges } from "@/components/source-badges";
 import { ui } from "@/components/ui";
 import { formatAuthors, SOURCE_TYPE_OPTIONS, type GroupRefDto, type SourceDto } from "@/lib/dto";
 import { EmptyState } from "@/components/empty-state";
@@ -95,7 +96,7 @@ export function SourceRow({ source: s }: { source: SourceDto }) {
           {s.authors.length > 0 && <span>{formatAuthors(s.authors)}</span>}
           {s.year && <span className="tabular-nums">{s.year}</span>}
           <span className={ui.badge}>{typeLabel(s.type)}</span>
-          {s.aiSummary && <span className={ui.badge}>Summary</span>}
+          <SourceBadges summarised={!!s.aiSummary} annotated={isAnnotated(s.notes)} />
         </span>
       </Link>
       {/* Open straight into the reading panel, beside the notes. */}

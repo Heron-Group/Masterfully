@@ -147,7 +147,7 @@ test("a pasted screenshot and a PDF attach to one entry", async ({ page }) => {
   await expect(article).toBeVisible();
   const img = article.locator("img");
   await expect(img).toHaveCount(1);
-  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(article.getByText("reading.pdf")).toBeVisible();
   const pdfHref = await article.getByRole("link", { name: /^reading\.pdf/ }).getAttribute("href");
   const res = await page.request.get(pdfHref!);

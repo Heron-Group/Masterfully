@@ -36,7 +36,7 @@ test("create a group, add sources from the library, see it in the index", async 
   await signIn(page, "/groups");
   await page.getByRole("link", { name: "New group" }).click();
   // The blank group page: the title creates it.
-  await expect(page.getByText("Give the group a title to save it")).toBeVisible();
+  await expect(page.getByText("Give the group a title to save it")).toBeVisible({ timeout: 15_000 }); // first visit compiles in dev
   await page.getByLabel("Group title").fill(TITLE);
   await page.getByLabel("Group title").press("Enter");
   await page.waitForURL(/\/groups\/e2e-methods-/);

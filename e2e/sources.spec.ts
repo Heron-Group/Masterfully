@@ -49,7 +49,7 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   await signIn(page, "/library");
   await page.getByRole("link", { name: "Add source" }).click();
   // The blank source page: fill in the details first, then the title creates it.
-  await expect(page.getByText("Give the source a title to save it")).toBeVisible();
+  await expect(page.getByText("Give the source a title to save it")).toBeVisible({ timeout: 15_000 }); // first visit compiles in dev
   const authors = page.getByLabel("Authors", { exact: true });
   await authors.fill("Brody, Ann; Müller, Jo");
   await authors.press("Enter");

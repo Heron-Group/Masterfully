@@ -146,7 +146,17 @@ function buildDecorations(view: EditorView): DecorationSet {
             if (node.parent?.name === "InlineCode" && !isActive(node.from)) decos.push(hide.range(node.from, node.to));
             break;
           case "Link": {
-            decos.push(Decoration.mark({ class: "cm-md-link" }).range(node.from, node.to));
+            // Links to a source in the library look like a mention; the
+            // address is kept on the element so Cmd/Ctrl-click can open it.
+            const urlNode = node.node.getChild("URL");
+            const href = urlNode ? state.sliceDoc(urlNode.from, urlNode.to) : "";
+            const source = href.startsWith("/library/");
+            decos.push(
+              Decoration.mark({
+                class: source ? "cm-md-link cm-md-source-link" : "cm-md-link",
+                attributes: href ? { "data-href": href, title: `${source ? "Source" : href} — ⌘/Ctrl-click to open` } : {},
+              }).range(node.from, node.to),
+            );
             if (isActive(node.from)) break;
             // Hide "[", "](url "title")" leaving only the link text.
             const marks = node.getChildren("LinkMark");

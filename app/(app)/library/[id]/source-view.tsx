@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 import { InlineAutoText, InlineSelectText, InlineTitle, useInlineSave } from "@/components/inline-fields";
 import { GroupTags } from "@/components/group-tags";
+import { isAnnotated, SourceBadges } from "@/components/source-badges";
 import { LiveEditor } from "@/components/live-editor/live-editor";
 import { ReaderPanel, type ReaderTab } from "@/components/reader-panel";
 import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
@@ -44,6 +45,8 @@ export function SourceView({
   initialRead?: ReadKind;
 }) {
   const tabs = readerTabs(source);
+  // Follows the notes as they're typed, so "Annotated" appears straight away.
+  const [annotated, setAnnotated] = useState(() => isAnnotated(source.notes));
   const [reading, setReadingState] = useState<ReadKind | null>(
     initialRead && tabs.some((t) => t.key === initialRead) ? initialRead : null,
   );
@@ -73,9 +76,9 @@ export function SourceView({
   return (
     <>
       <article className="mt-4 space-y-10">
-        <Details source={source} allGroups={allGroups} />
+        <Details source={source} allGroups={allGroups} annotated={annotated} />
         <MaterialSection source={source} reading={open} onRead={setReading} />
-        <NotesSection source={source} />
+        <NotesSection source={source} onAnnotated={setAnnotated} />
         <SourceSummaryPanel source={source} />
       </article>
       {open && <ReaderPanel title={source.title} tabs={tabs} active={open} onTab={setReading} onClose={close} />}
@@ -93,7 +96,7 @@ function ErrorText({ result }: { result: ActionResult | null }) {
 }
 
 /** Title, then one quiet line of details (edited in place) with delete. */
-function Details({ source, allGroups }: { source: SourceDto; allGroups: GroupRefDto[] }) {
+function Details({ source, allGroups, annotated }: { source: SourceDto; allGroups: GroupRefDto[]; annotated: boolean }) {
   const { save, label, isError } = useInlineSave();
   const update = (props: SourceProps) =>
     save(async () => {
@@ -135,6 +138,9 @@ function Details({ source, allGroups }: { source: SourceDto; allGroups: GroupRef
         {dot}
         <span className="px-1.5 text-faint" title="Date added">
           Added {formatShortDate(source.added)}
+        </span>
+        <span className="flex items-center gap-1 px-1">
+          <SourceBadges summarised={!!source.aiSummary} annotated={annotated} />
         </span>
         <span className="ml-auto">
           <DeleteControl source={source} />
@@ -527,8 +533,12 @@ function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: Read
   );
 }
 
-function NotesSection({ source }: { source: SourceDto }) {
-  const [notes, setNotes] = useState(source.notes);
+function NotesSection({ source, onAnnotated }: { source: SourceDto; onAnnotated: (annotated: boolean) => void }) {
+  const [notes, setNotesState] = useState(source.notes);
+  const setNotes = (value: string) => {
+    setNotesState(value);
+    onAnnotated(isAnnotated(value));
+  };
   const { state, error, flush } = useAutosave(notes, async (value) => {
     const r = await saveSourceNotes(source.id, value);
     if (r.ok) changed();

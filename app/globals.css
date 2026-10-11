@@ -144,6 +144,27 @@ body {
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
+/* A link to a source in the library: a mention with a small book icon. */
+.prose-rp a.source-link, .prose-rp .cm-md-source-link {
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.prose-rp a.source-link::before, .prose-rp .cm-md-source-link::before {
+  content: "";
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.25em;
+  vertical-align: -0.05em;
+  background: var(--accent);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 7v14'/%3E%3Cpath d='M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.prose-rp a.source-link:hover { background: color-mix(in srgb, var(--accent) 18%, var(--accent-soft)); }
 .prose-rp strong, .prose-rp .cm-md-strong { font-weight: 600; }
 .prose-rp em, .prose-rp .cm-md-em { font-style: italic; }
 .prose-rp del, .prose-rp .cm-md-strike { text-decoration: line-through; }
