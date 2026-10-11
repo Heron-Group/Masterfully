@@ -2,7 +2,7 @@ import "server-only";
 import type { ContentStore } from "../content/store";
 import { assignColours } from "./colours";
 import { buildGraph, type MapGraph } from "./graph";
-import { readMapLayout, updateMapLayout, type MapView } from "./layout";
+import { readMapLayout, updateMapLayout, type MapLayout, type MapView } from "./layout";
 
 /** Each group's colour, assigning (and saving) colours for groups that don't have one yet. */
 export async function groupColours(userId: string, groups: Array<{ id: string; created: string }>): Promise<Record<string, string>> {
@@ -16,7 +16,7 @@ export async function groupColours(userId: string, groups: Array<{ id: string; c
   return colours;
 }
 
-export type MapResponse = MapGraph & { lastView: MapView };
+export type MapResponse = MapGraph & { lastView: MapView; pins: NonNullable<MapLayout["pins"]> };
 
 /** The signed-in user's map, rebuilt from their sources and groups. */
 export async function loadMap(userId: string, store: ContentStore): Promise<MapResponse> {
@@ -28,5 +28,5 @@ export async function loadMap(userId: string, store: ContentStore): Promise<MapR
     colours,
   });
   const layout = await readMapLayout(userId);
-  return { ...graph, lastView: layout.lastView ?? "network" };
+  return { ...graph, lastView: layout.lastView ?? "network", pins: layout.pins ?? {} };
 }

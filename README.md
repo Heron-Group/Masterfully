@@ -21,6 +21,7 @@ load.
 - [Deploying on Plesk](#deploying-on-plesk)
 - [Docker fallback](#docker-fallback)
 - [AI summaries and changing the model](#ai-summaries-and-changing-the-model)
+- [Source map](#source-map)
 - [Tests](#tests)
 - [How the code fits together](#how-the-code-fits-together)
 - [Troubleshooting](#troubleshooting)
@@ -321,6 +322,33 @@ plays, and the sentence being read is highlighted.
 
 ---
 
+## Source map
+
+`/map` shows how sources and reading groups connect. It only shows what's
+already in the data and is rebuilt from the files on every visit; the only
+thing it saves is its own layout (`map-layout.json`: group colours, the last
+view used, and dragged node positions per view).
+
+- **Source network**: sources and groups, with membership lines, the links
+  written in source notes (arrows; thicker for repeated links), and
+  group-to-group crossover lines. Sources in several groups are drawn as pies.
+- **Group overview**: one node per group, joined by lines as thick as their
+  crossover (shared sources + bridge links). Click a line for exactly what's
+  behind it; double-click a group to open the network focused on it.
+- **Crossover** and **Gaps** modes highlight shared sources and bridge links,
+  or isolated and unlinked sources, and list them in the side panel.
+- Double-click a source to focus on it (1 or 2 steps); Escape returns.
+- Dragged nodes stay pinned and are saved; **Reset layout** clears them.
+- **Export** saves the current view as SVG (shapes and editable text in named
+  layers, for Illustrator) or PNG, with the legend and date.
+
+Maps with more than 300 nodes draw a quick first layout at once, work out the
+full layout in a Web Worker, then ease into it; the result is kept in the
+browser, so the next visit is instant unless the data changed. Layouts are
+seeded, so the same data gives the same picture.
+
+---
+
 ## Tests
 
 ```bash
@@ -328,6 +356,7 @@ npm test             # unit tests: storage, workspaces, accounts, frontmatter, u
 npm run typecheck
 npm run lint
 npm run test:e2e     # browser tests against the dev server
+MAP_PERF=1 npx playwright test e2e/map-performance.spec.ts --project=desktop   # source map at 500 sources / 2,000 links
 ```
 
 Browser tests need the browsers once (`npx playwright install chromium webkit`),
