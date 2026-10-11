@@ -80,18 +80,21 @@ test("link text to a source with Cmd/Ctrl+K, and insert one from the / menu", as
   await sourcePicker.getByRole("option", { name: /New source/ }).click();
   await expect.poll(() => sourceFile(sourceId), { timeout: 10_000 }).toMatch(new RegExp(`See also \\[Brand new ${stamp}\\]\\(/library/[a-z0-9-]+\\)`));
 
-  // In the editor the link is a mention; Cmd/Ctrl-click opens the source.
+  // In the editor the link is a mention; a plain click opens the source in a new tab.
   const mention = page.locator(".cm-md-source-link", { hasText: "the primer" }).first();
   await expect(mention).toBeVisible();
   await page.keyboard.press("Escape"); // leave the editor so the link shows as a mention
-  await mention.click({ modifiers: ["ControlOrMeta"] });
-  await page.waitForURL(`**/library/${targetId}`);
+  const [tab] = await Promise.all([page.context().waitForEvent("page"), mention.click()]);
+  await tab.waitForURL(`**/library/${targetId}`);
+  expect(page.url()).toContain(`/library/${sourceId}`); // the notes stay open
 
   // The target lists the source that links to it; click it to go back.
-  const refs = page.getByRole("group", { name: "Referenced by" });
+  await waitForHydration(tab);
+  const refs = tab.getByRole("group", { name: "Referenced by" });
   await expect(refs.getByRole("link", { name: `Notes test ${stamp}` })).toBeVisible();
   await refs.getByRole("link", { name: `Notes test ${stamp}` }).click();
-  await page.waitForURL(`**/library/${sourceId}`);
+  await tab.waitForURL(`**/library/${sourceId}`);
+  await tab.close();
 });
 
 test("formatting marks stay hidden, even on the line being edited", async ({ page }) => {

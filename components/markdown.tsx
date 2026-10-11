@@ -1,4 +1,3 @@
-import Link from "next/link";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -8,9 +7,9 @@ const components: Components = {
     // Links to a source in the library ([text](/library/<id>)), shown as a mention.
     if (href?.startsWith("/library/")) {
       return (
-        <Link href={href} className="source-link" title="Open source">
+        <a href={href} target="_blank" rel="noopener" className="source-link" title="Open source in a new tab">
           {children}
-        </Link>
+        </a>
       );
     }
     const external = !!href && /^https?:\/\//.test(href);

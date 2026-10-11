@@ -4,7 +4,6 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorSelection, EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderExt } from "@codemirror/view";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { LinkPicker, SlashMenu, type Anchor, type LinkTarget } from "./editor-popovers";
 import { formatKeymap } from "./format-commands";
@@ -53,7 +52,6 @@ export function LiveEditor({
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const router = useRouter();
   // The "/" menu (query typed after the "/", and where to show it).
   const [slash, setSlash] = useState<{ query: string; at: Anchor } | null>(null);
   const slashKeys = useRef<((key: string) => boolean) | null>(null);
@@ -67,9 +65,9 @@ export function LiveEditor({
   const [picker, setPicker] = useState<{ from: number; to: number; at: Anchor; mode: "source" | "link" } | null>(null);
   const openPickerRef = useRef<(mode: "source" | "link") => void>(() => {});
   // Latest callbacks, read by the editor without rebuilding it.
-  const callbacks = useRef({ onChange, onSubmit, onEscape, onBlur, onPasteFiles, router });
+  const callbacks = useRef({ onChange, onSubmit, onEscape, onBlur, onPasteFiles });
   useEffect(() => {
-    callbacks.current = { onChange, onSubmit, onEscape, onBlur, onPasteFiles, router };
+    callbacks.current = { onChange, onSubmit, onEscape, onBlur, onPasteFiles };
   });
 
   useEffect(() => {
@@ -126,14 +124,17 @@ export function LiveEditor({
               setFormatAt({ left: event.clientX, top: event.clientY, bottom: event.clientY });
               return true;
             },
-            // Cmd/Ctrl-click a link to open it (a plain click places the cursor to edit).
-            click: (event) => {
-              if (!(event.metaKey || event.ctrlKey)) return false;
+            // A click on a link to a source opens it in a new tab. Web links
+            // open with Cmd/Ctrl-click (a plain click places the cursor to edit).
+            // Dragging across a link to select it doesn't open anything.
+            click: (event, v) => {
               const href = (event.target as HTMLElement).closest<HTMLElement>("[data-href]")?.dataset.href;
               if (!href) return false;
+              const source = href.startsWith("/library/");
+              if (!source && !(event.metaKey || event.ctrlKey)) return false;
+              if (!v.state.selection.main.empty) return false;
               event.preventDefault();
-              if (href.startsWith("/")) callbacks.current.router.push(href);
-              else window.open(href, "_blank", "noopener,noreferrer");
+              window.open(href, "_blank", "noopener,noreferrer");
               return true;
             },
             paste: (event) => {

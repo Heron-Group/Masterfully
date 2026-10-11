@@ -165,7 +165,7 @@ function buildDecorations(view: EditorView): Built {
             decos.push(
               Decoration.mark({
                 class: source ? "cm-md-link cm-md-source-link" : "cm-md-link",
-                attributes: href ? { "data-href": href, title: `${source ? "Source" : href} — ⌘/Ctrl-click to open` } : {},
+                attributes: href ? { "data-href": href, title: source ? "Open source in a new tab" : `${href} — ⌘/Ctrl-click to open` } : {},
               }).range(node.from, node.to),
             );
             // Hide "[", "](url "title")" leaving only the link text.
