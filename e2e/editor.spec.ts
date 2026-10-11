@@ -88,6 +88,35 @@ test("link text to a source with Cmd/Ctrl+K, and insert one from the / menu", as
   await page.waitForURL(`**/library/${targetId}`);
 });
 
+test("formatting marks stay hidden, even on the line being edited", async ({ page }) => {
+  await as(page, `/library/${sourceId}`);
+  const notes = page.getByRole("textbox", { name: "My notes" });
+  await setEditorText(page, notes, "Make this **word** bold.");
+  const line = notes.locator(".cm-line").first();
+  // Still typing on this line: no asterisks, but the word is bold.
+  await expect(line).toHaveText("Make this word bold.");
+  await expect(line.locator(".cm-md-strong")).toHaveText("word");
+  await expect.poll(() => sourceFile(sourceId), { timeout: 10_000 }).toContain("Make this **word** bold.");
+
+  // Backspace just after the bold word deletes its last letter, not a hidden "*".
+  await page.keyboard.press("End");
+  for (let i = 0; i < " bold.".length; i++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Backspace");
+  await expect(line).toHaveText("Make this wor bold.");
+  await expect.poll(() => sourceFile(sourceId), { timeout: 10_000 }).toContain("Make this **wor** bold.");
+  // Deleting the rest leaves no empty "****" behind.
+  for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
+  await expect(line).toHaveText("Make this  bold.");
+  await expect.poll(() => sourceFile(sourceId), { timeout: 10_000 }).toContain("Make this  bold.");
+
+  // A heading's "#" is hidden too; Backspace at its start makes it a paragraph.
+  await setEditorText(page, notes, "# Big idea");
+  await expect(notes.locator(".cm-line").first()).toHaveText("Big idea");
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Backspace");
+  await expect.poll(() => sourceFile(sourceId), { timeout: 10_000 }).toMatch(/## Notes\n\nBig idea\n/);
+});
+
 test("right-click selected text to style it; clicking elsewhere closes pop-ups", async ({ page }) => {
   await as(page, `/library/${sourceId}`);
   const notes = page.getByRole("textbox", { name: "My notes" });
