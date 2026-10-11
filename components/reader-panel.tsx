@@ -7,7 +7,9 @@ import { indexText } from "./read-aloud/dom";
 import { ReadAloud, type ReadSource } from "./read-aloud/read-aloud";
 
 export type ReaderTab = {
-  key: "pdf" | "link";
+  /** "pdf" / "link" for the first of each, "pdf-2", "link-3"… for more. */
+  key: string;
+  kind: "pdf" | "link";
   label: string;
   /** What the panel shows (same-origin PDF or the reader view). */
   src: string;
@@ -129,8 +131,8 @@ export function ReaderPanel({
 }: {
   title: string;
   tabs: ReaderTab[];
-  active: ReaderTab["key"];
-  onTab: (key: ReaderTab["key"]) => void;
+  active: string;
+  onTab: (key: string) => void;
   onClose: () => void;
 }) {
   const [width, setWidth] = useState<number | null>(null);
@@ -182,7 +184,7 @@ export function ReaderPanel({
     window.addEventListener("pointerup", onUp);
   }
 
-  const src = tab.key === "link" ? `${tab.src}?theme=${theme}` : tab.src;
+  const src = tab.kind === "link" ? `${tab.src}${tab.src.includes("?") ? "&" : "?"}theme=${theme}` : tab.src;
 
   // When the page opens with the web page showing, the iframe can finish
   // loading before React attaches onLoad; pick that up here.
@@ -195,9 +197,9 @@ export function ReaderPanel({
   }, [src]);
 
   const source = useMemo<ReadSource | null>(() => {
-    if (tab.key === "pdf") return pdfApi ? pdfSource(pdfApi) : null;
+    if (tab.kind === "pdf") return pdfApi ? pdfSource(pdfApi) : null;
     return loadedFrame ? webSource(loadedFrame.el) : null;
-  }, [tab.key, pdfApi, loadedFrame]);
+  }, [tab.kind, pdfApi, loadedFrame]);
 
   return (
     <aside
@@ -219,7 +221,7 @@ export function ReaderPanel({
 
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-rule px-3">
         {tabs.length > 1 ? (
-          <div role="tablist" aria-label="Show" className="flex rounded-md bg-accent-soft/70 p-0.5 text-xs">
+          <div role="tablist" aria-label="Show" className="flex min-w-0 max-w-[60%] shrink overflow-x-auto rounded-md bg-accent-soft/70 p-0.5 text-xs">
             {tabs.map((t) => (
               <button
                 key={t.key}
@@ -228,12 +230,12 @@ export function ReaderPanel({
                 onClick={() => onTab(t.key)}
                 className={`flex items-center gap-1.5 rounded px-2 py-1 transition-colors ${t.key === tab.key ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"}`}
               >
-                {t.key === "pdf" ? <FileText size={14} aria-hidden="true" /> : <Globe size={14} aria-hidden="true" />}
-                {t.label}
+                {t.kind === "pdf" ? <FileText size={14} aria-hidden="true" className="shrink-0" /> : <Globe size={14} aria-hidden="true" className="shrink-0" />}
+                <span className="max-w-[9rem] truncate">{t.label}</span>
               </button>
             ))}
           </div>
-        ) : tab.key === "pdf" ? (
+        ) : tab.kind === "pdf" ? (
           <FileText size={16} className="shrink-0 text-muted" aria-hidden="true" />
         ) : (
           <Globe size={16} className="shrink-0 text-muted" aria-hidden="true" />
@@ -266,10 +268,10 @@ export function ReaderPanel({
       </header>
 
       <div className={`flex min-h-0 flex-1 flex-col ${dragging ? "pointer-events-none select-none" : ""}`}>
-        {tab.key === "pdf" ? (
+        {tab.kind === "pdf" ? (
           <PdfViewer key={src} url={src} title={title} onReady={setPdfApi} />
         ) : (
-          <iframe ref={frame} onLoad={(e) => setLoadedFrame({ el: e.currentTarget })} key={src} src={src} title={`${tab.label}: ${title}`} className={`min-h-0 w-full flex-1 ${tab.key === "link" ? (theme === "dark" ? "bg-black" : "bg-white") : "bg-surface"}`} />
+          <iframe ref={frame} onLoad={(e) => setLoadedFrame({ el: e.currentTarget })} key={src} src={src} title={`${tab.label}: ${title}`} className={`min-h-0 w-full flex-1 ${tab.kind === "link" ? (theme === "dark" ? "bg-black" : "bg-white") : "bg-surface"}`} />
         )}
       </div>
       <ReadAloud key={src} source={source} open={listening} onOpenChange={setListening} />

@@ -42,7 +42,7 @@ async function SourceLoader({
       key={source.id}
       source={sourceToDto(source, groups)}
       allGroups={groups.map((g) => ({ id: g.id, title: g.title }))}
-      initialRead={read === "pdf" || read === "link" ? read : undefined}
+      initialRead={typeof read === "string" && /^(pdf|link)(-\d+)?$/.test(read) ? read : undefined}
     />
   );
 }

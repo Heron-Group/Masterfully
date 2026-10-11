@@ -59,6 +59,11 @@ export type Source = {
   authors: string[];
   year?: number;
   type: SourceType;
+  /** Web links, in order. */
+  links: string[];
+  /** PDF files (paths under attachments/), in order. */
+  pdfs: string[];
+  /** The first link and PDF: the ones AI summaries and the library icons use. */
   url?: string;
   pdf?: string;
   added: string;
@@ -178,9 +183,21 @@ const SOURCE_KEYS = [
   "type",
   "url",
   "pdf",
+  "links",
+  "pdfs",
   "added",
   "updated",
 ] as const;
+
+/** Lists without blanks or repeats, in order. */
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
+}
+
+/** Keep `url` and `pdf` (the first of each) in step with the lists. */
+export function withPrimary<T extends { links: string[]; pdfs: string[] }>(source: T): T & { url?: string; pdf?: string } {
+  return { ...source, url: source.links[0], pdf: source.pdfs[0] };
+}
 
 export function toSourceType(value: unknown): SourceType {
   const s = str(value).trim().toLowerCase();
@@ -193,6 +210,9 @@ export function parseSource(
 ): Source {
   const { data, body, error } = parseFile(raw);
   const added = isoDate(data.added, meta.fallbackDate);
+  // Older files have one `url` and one `pdf`; newer ones have `links` and `pdfs` lists.
+  const links = unique([optStr(data.url) ?? "", ...strList(data.links)]);
+  const pdfs = unique([optStr(data.pdf) ?? "", ...strList(data.pdfs)]);
   return {
     id: meta.id,
     path: meta.path,
@@ -200,8 +220,10 @@ export function parseSource(
     authors: strList(data.authors),
     year: num(data.year),
     type: toSourceType(data.type),
-    url: optStr(data.url),
-    pdf: optStr(data.pdf),
+    links,
+    pdfs,
+    url: links[0],
+    pdf: pdfs[0],
     added,
     updated: isoDate(data.updated, added),
     notes: getSection(body, "Notes", SOURCE_SECTIONS, { preambleFallback: true }),
@@ -220,8 +242,8 @@ export function serializeSource(source: Source): string {
       authors: source.authors,
       year: source.year,
       type: source.type,
-      url: source.url,
-      pdf: source.pdf,
+      links: source.links.length ? source.links : undefined,
+      pdfs: source.pdfs.length ? source.pdfs : undefined,
       added: source.added,
       updated: source.updated,
       ...source.extra,

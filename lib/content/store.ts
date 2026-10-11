@@ -30,6 +30,7 @@ import {
   serializeSource,
   type Settings,
   type Source,
+  withPrimary,
   type SourceType,
 } from "./schemas";
 import {
@@ -555,7 +556,7 @@ export class ContentStore {
         const rel = `${DIRS.sources}/${id}.md`;
         let pdf: string | undefined;
         if (opts.pdf) {
-          pdf = `${DIRS.attachments}/sources/${id}.pdf`;
+          pdf = this.sourcePdfPath(id, opts.pdf.name, []);
           await tx.moveIn(opts.pdf.tempPath, pdf);
         }
         const now = this.stamp();
@@ -567,6 +568,8 @@ export class ContentStore {
           authors,
           year: input.year,
           type: input.type ?? "other",
+          links: input.url?.trim() ? [input.url.trim()] : [],
+          pdfs: pdf ? [pdf] : [],
           url: input.url?.trim() || undefined,
           pdf,
           added: now,
@@ -593,7 +596,8 @@ export class ContentStore {
 
   /**
    * Change some of a source's details. Keys left out are unchanged; `year:
-   * null` or `url: ""` clear that field. An empty title is ignored.
+   * null` clears the year, and `url` replaces the first link (`""` removes
+   * it). An empty title is ignored.
    */
   async updateSource(id: string, patch: SourcePatch): Promise<Source> {
     return this.write(async (tx) => {
@@ -604,9 +608,36 @@ export class ContentStore {
         authors: patch.authors ? patch.authors.map((a) => a.trim()).filter(Boolean) : source.authors,
         year: "year" in patch ? (patch.year ?? undefined) : source.year,
         type: patch.type ?? source.type,
-        url: "url" in patch ? patch.url?.trim() || undefined : source.url,
         updated: this.stamp(),
       };
+      if ("url" in patch) {
+        const url = patch.url?.trim();
+        const rest = source.links.slice(1).filter((l) => l !== url);
+        next.links = url ? [url, ...rest] : rest;
+      }
+      const saved = withPrimary(next);
+      await tx.writeText(source.path, serializeSource(saved));
+      return saved;
+    });
+  }
+
+  /** Add a link (to the end), change one, or remove one. `from` is the link being changed. */
+  async setSourceLink(id: string, change: { from?: string; to?: string }): Promise<Source> {
+    return this.write(async (tx) => {
+      const source = this.requireSource(id);
+      const to = change.to?.trim();
+      if (to && !/^https?:\/\//i.test(to)) throw new ContentError("The link should start with http:// or https://", 400);
+      let links = [...source.links];
+      const at = change.from ? links.indexOf(change.from) : -1;
+      if (change.from && at < 0) throw new ContentError("That link isn't on this source any more", 404);
+      if (at >= 0) {
+        if (to) links[at] = to;
+        else links.splice(at, 1);
+      } else if (to) {
+        links.push(to);
+      }
+      links = [...new Set(links)];
+      const next = withPrimary({ ...source, links, updated: this.stamp() });
       await tx.writeText(source.path, serializeSource(next));
       return next;
     });
@@ -626,17 +657,35 @@ export class ContentStore {
     });
   }
 
-  /** Replace or add the source PDF. */
-  async setSourcePdf(id: string, pdf: StagedFile | null): Promise<Source> {
+  /**
+   * Where a new PDF goes: attachments/sources/<id>/<its own name>.pdf.
+   * (Sources from before several PDFs were allowed may also have
+   * attachments/sources/<id>.pdf, which keeps working.)
+   */
+  private sourcePdfPath(id: string, name: string, taken: string[]): string {
+    const file = safeFileName(/\.pdf$/i.test(name) ? name : `${name || "document"}.pdf`);
+    return uniqueFileName(`${DIRS.attachments}/sources/${id}`, file, (p) => taken.includes(p));
+  }
+
+  /** Add a PDF to a source (it can have any number). */
+  async addSourcePdf(id: string, pdf: StagedFile): Promise<Source> {
     return this.write(async (tx) => {
       const source = this.requireSource(id);
-      let pdfPath: string | undefined;
-      if (source.pdf) await tx.removeAttachment(source.pdf);
-      if (pdf) {
-        pdfPath = `${DIRS.attachments}/sources/${id}.pdf`;
-        await tx.moveIn(pdf.tempPath, pdfPath);
-      }
-      const next = { ...source, pdf: pdfPath, updated: this.stamp() };
+      const path = this.sourcePdfPath(id, pdf.name, source.pdfs);
+      await tx.moveIn(pdf.tempPath, path);
+      const next = withPrimary({ ...source, pdfs: [...source.pdfs, path], updated: this.stamp() });
+      await tx.writeText(source.path, serializeSource(next));
+      return next;
+    });
+  }
+
+  /** Remove one of a source's PDFs (and its file). */
+  async removeSourcePdf(id: string, file: string): Promise<Source> {
+    return this.write(async (tx) => {
+      const source = this.requireSource(id);
+      if (!source.pdfs.includes(file)) throw new ContentError("That PDF isn't on this source any more", 404);
+      await tx.removeAttachment(file);
+      const next = withPrimary({ ...source, pdfs: source.pdfs.filter((p) => p !== file), updated: this.stamp() });
       await tx.writeText(source.path, serializeSource(next));
       return next;
     });
@@ -654,7 +703,7 @@ export class ContentStore {
     });
   }
 
-  /** Delete a source, its PDF, and its membership of every group, all or nothing. */
+  /** Delete a source, its PDFs, and its membership of every group, all or nothing. */
   async deleteSource(id: string): Promise<void> {
     await this.write(async (tx) => {
       const source = this.requireSource(id);
@@ -668,7 +717,8 @@ export class ContentStore {
           sourcesChanged: now,
         });
       }
-      if (source.pdf) await tx.removeAttachment(source.pdf);
+      for (const pdf of source.pdfs) await tx.removeAttachment(pdf);
+      await tx.remove(`${DIRS.attachments}/sources/${id}`);
       await tx.remove(source.path);
     });
   }

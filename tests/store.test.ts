@@ -242,9 +242,40 @@ describe("sources and groups", () => {
       { title: "Paper", notes: "Notes here" },
       { pdf: { ...pdf, name: "p.pdf", type: "application/pdf" }, groups: ["methods"] },
     );
-    expect(s.pdf).toBe(`attachments/sources/${s.id}.pdf`);
+    expect(s.pdf).toBe(`attachments/sources/${s.id}/p.pdf`);
     expect((await store.getGroup("methods"))?.sources).toEqual([{ id: s.id, note: "" }]);
     expect((await store.getSource(s.id))?.notes).toBe("Notes here");
+  });
+
+  it("holds several PDFs and links; the first of each is the main one", async () => {
+    const store = await makeStore();
+    const first = await store.stageUpload(Buffer.from("%PDF-1"));
+    const s = await store.createSource({ title: "Many", url: "https://a.example/1" }, { pdf: { ...first, name: "a.pdf", type: "application/pdf" } });
+    const second = await store.stageUpload(Buffer.from("%PDF-2"));
+    let next = await store.addSourcePdf(s.id, { ...second, name: "Chapter 2.PDF", type: "application/pdf" });
+    expect(next.pdfs).toEqual([`attachments/sources/${s.id}/a.pdf`, `attachments/sources/${s.id}/chapter-2.pdf`]);
+    expect(next.pdf).toBe(`attachments/sources/${s.id}/a.pdf`);
+
+    next = await store.setSourceLink(s.id, { to: "https://b.example/2" });
+    next = await store.setSourceLink(s.id, { to: "https://b.example/2" }); // no duplicates
+    expect(next.links).toEqual(["https://a.example/1", "https://b.example/2"]);
+    next = await store.setSourceLink(s.id, { from: "https://b.example/2", to: "https://b.example/two" });
+    next = await store.setSourceLink(s.id, { from: "https://a.example/1", to: "" });
+    expect(next.links).toEqual(["https://b.example/two"]);
+    expect(next.url).toBe("https://b.example/two");
+    await expect(store.setSourceLink(s.id, { to: "ftp://nope" })).rejects.toThrow(/http/);
+
+    next = await store.removeSourcePdf(s.id, `attachments/sources/${s.id}/a.pdf`);
+    expect(next.pdf).toBe(`attachments/sources/${s.id}/chapter-2.pdf`);
+    expect(await fs.stat(path.join(dir, `attachments/sources/${s.id}/a.pdf`)).catch(() => null)).toBeNull();
+
+    // Saved and read back the same.
+    await store.rebuildIndex();
+    expect((await store.getSource(s.id))?.pdfs).toEqual([`attachments/sources/${s.id}/chapter-2.pdf`]);
+
+    await store.deleteSource(s.id);
+    expect(await fs.stat(path.join(dir, `attachments/sources/${s.id}`)).catch(() => null)).toBeNull();
+    expect(await scratch()).toEqual([]);
   });
 
   it("deleting a source removes it from every group and deletes its PDF", async () => {

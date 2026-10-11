@@ -58,8 +58,14 @@ export async function saveSourceNotes(id: string, notes: string): Promise<Action
   return run(() => getContentStore().then((s) => s.setSourceNotes(id, notes)), { refresh: false });
 }
 
-export async function removeSourcePdf(id: string): Promise<ActionResult> {
-  return run(() => getContentStore().then((s) => s.setSourcePdf(id, null)));
+/** Remove one of a source's PDFs (`file` is its path, from SourceDto.pdfs). */
+export async function removeSourcePdf(id: string, file: string): Promise<ActionResult> {
+  return run(() => getContentStore().then((s) => s.removeSourcePdf(id, file)));
+}
+
+/** Add a link (no `from`), change one (`from` → `to`), or remove one (`to` empty). */
+export async function setSourceLink(id: string, change: { from?: string; to?: string }): Promise<ActionResult> {
+  return run(() => getContentStore().then((s) => s.setSourceLink(id, change)));
 }
 
 export async function setSourceInGroup(sourceId: string, groupId: string, member: boolean): Promise<ActionResult> {

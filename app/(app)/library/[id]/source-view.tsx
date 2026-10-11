@@ -11,10 +11,10 @@ import { ReaderPanel, type ReaderTab } from "@/components/reader-panel";
 import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
 import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
-import { MAX_UPLOAD_BYTES, SOURCE_TYPE_OPTIONS, type GroupRefDto, type SourceDto, type SourceType } from "@/lib/dto";
+import { MAX_UPLOAD_BYTES, SOURCE_TYPE_OPTIONS, type GroupRefDto, type SourceDto, type SourcePdfDto, type SourceType } from "@/lib/dto";
 import { formatShortDate } from "@/lib/time";
 import { upload } from "@/lib/upload-client";
-import { deleteSource, removeSourcePdf, saveSourceNotes, setSourceInGroup, updateSourceProps, type ActionResult, type SourceProps } from "../actions";
+import { deleteSource, removeSourcePdf, saveSourceNotes, setSourceInGroup, setSourceLink, updateSourceProps, type ActionResult, type SourceProps } from "../actions";
 import { createGroup } from "../../groups/actions";
 import { SourceSummaryPanel } from "./source-summary";
 
@@ -24,14 +24,31 @@ function changed() {
 
 export type ReadKind = ReaderTab["key"];
 
+/** Short names for the reading panel's tabs when there are several of a kind. */
+const host = (url: string) => url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
+export const tabKey = (kind: "pdf" | "link", i: number) => (i === 0 ? kind : `${kind}-${i + 1}`);
+
 function readerTabs(source: SourceDto): ReaderTab[] {
   const tabs: ReaderTab[] = [];
-  if (source.pdf) {
-    tabs.push({ key: "pdf", label: "PDF", src: source.pdf.url, openUrl: source.pdf.url, downloadUrl: source.pdf.downloadUrl });
-  }
-  if (source.url) {
-    tabs.push({ key: "link", label: "Web page", src: `/api/reader/${encodeURIComponent(source.id)}`, openUrl: source.url });
-  }
+  source.pdfs.forEach((pdf, i) =>
+    tabs.push({
+      key: tabKey("pdf", i),
+      kind: "pdf",
+      label: source.pdfs.length > 1 ? pdf.name : "PDF",
+      src: pdf.url,
+      openUrl: pdf.url,
+      downloadUrl: pdf.downloadUrl,
+    }),
+  );
+  source.links.forEach((link, i) =>
+    tabs.push({
+      key: tabKey("link", i),
+      kind: "link",
+      label: source.links.length > 1 ? host(link) : "Web page",
+      src: `/api/reader/${encodeURIComponent(source.id)}${i ? `?n=${i}` : ""}`,
+      openUrl: link,
+    }),
+  );
   return tabs;
 }
 
@@ -239,7 +256,7 @@ function DeleteControl({ source }: { source: SourceDto }) {
         <div role="alertdialog" aria-label="Delete source" className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg bg-surface p-4 text-sm shadow-lg shadow-black/10 ring-1 ring-rule">
           <p>
             Delete <strong>{source.title}</strong>
-            {source.pdf ? " and its PDF" : ""}? It will also be removed from{" "}
+            {source.pdfs.length ? ` and its ${source.pdfs.length === 1 ? "PDF" : `${source.pdfs.length} PDFs`}` : ""}? It will also be removed from{" "}
             {source.groups.length ? `${source.groups.length} group${source.groups.length === 1 ? "" : "s"}` : "any groups"}. This can&apos;t be undone.
           </p>
           <div className="mt-3 flex gap-2">
@@ -268,9 +285,10 @@ function DeleteControl({ source }: { source: SourceDto }) {
 }
 
 /** The "Read PDF" / "Read web page" button: opens it beside your notes. */
+/** "Read PDF" / "Read web page": opens it beside your notes. */
 function ReadButton({ kind, label, reading, onRead }: { kind: ReadKind; label: string; reading: ReadKind | null; onRead: (k: ReadKind | null) => void }) {
   const open = reading === kind;
-  const Icon = kind === "pdf" ? BookOpen : Globe;
+  const Icon = kind.startsWith("pdf") ? BookOpen : Globe;
   return (
     <button
       type="button"
@@ -288,110 +306,135 @@ function ReadButton({ kind, label, reading, onRead }: { kind: ReadKind; label: s
 
 const iconButton = "rounded-md p-1.5 text-muted transition-colors hover:bg-accent-soft hover:text-ink";
 
-/** The source itself: add a PDF or a link, then read it alongside your notes. */
-function MaterialSection({ source, reading, onRead }: { source: SourceDto; reading: ReadKind | null; onRead: (k: ReadKind | null) => void }) {
+type ReadProps = { reading: ReadKind | null; onRead: (k: ReadKind | null) => void };
+
+/** The source itself: any number of PDFs and links, each readable beside your notes. */
+function MaterialSection({ source, reading, onRead }: { source: SourceDto } & ReadProps) {
+  const router = useRouter();
+  const [uploads, setUploads] = useState<{ name: string; progress: number }[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [addingLink, setAddingLink] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function uploadPdfs(files: File[]) {
+    const pdfs = files.filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+    if (pdfs.length < files.length) setError("Only PDF files can be added here.");
+    else setError(null);
+    for (const file of pdfs) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setError(`"${file.name}" is larger than 50 MB.`);
+        continue;
+      }
+      setUploads((u) => [...u, { name: file.name, progress: 0 }]);
+      const form = new FormData();
+      form.set("pdf", file, file.name);
+      try {
+        await upload(`/api/upload/sources/${encodeURIComponent(source.id)}/pdf`, form, (p) =>
+          setUploads((u) => u.map((x) => (x.name === file.name ? { ...x, progress: p } : x))),
+        );
+        changed();
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Upload failed.");
+      } finally {
+        setUploads((u) => u.filter((x) => x.name !== file.name));
+      }
+    }
+  }
+
+  const add = "-mx-1.5 flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-[15px] transition-colors hover:bg-accent-soft/70 hover:text-ink";
   return (
-    <section aria-labelledby="material-heading">
+    <section
+      aria-labelledby="material-heading"
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        setDragging(false);
+        void uploadPdfs([...e.dataTransfer.files]);
+      }}
+    >
       <h2 id="material-heading" className={`${ui.h2} mb-2`}>
-        PDF and link
+        PDFs and links
       </h2>
       <div className="divide-y divide-rule/70">
-        <PdfRow source={source} reading={reading} onRead={onRead} />
-        <LinkRow source={source} reading={reading} onRead={onRead} />
+        {source.pdfs.map((pdf, i) => (
+          <PdfRow key={pdf.file} source={source} pdf={pdf} kind={tabKey("pdf", i)} reading={reading} onRead={onRead} />
+        ))}
+        {source.links.map((link, i) => (
+          <LinkRow key={link} source={source} link={link} kind={tabKey("link", i)} reading={reading} onRead={onRead} />
+        ))}
+        {uploads.map((u) => (
+          <p key={u.name} className="py-2.5 text-sm text-muted">
+            Uploading {u.name} · {Math.round(u.progress * 100)}%…
+          </p>
+        ))}
+        {addingLink && <LinkRow source={source} reading={reading} onRead={onRead} onDone={() => setAddingLink(false)} />}
+        <div className="flex flex-wrap gap-x-4 py-2">
+          <label className={`${add} ${dragging ? "bg-accent-soft text-ink" : "text-faint"}`}>
+            <FilePlus2 size={17} strokeWidth={1.6} aria-hidden="true" />
+            Add a PDF
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              multiple
+              className="sr-only"
+              onChange={(e) => {
+                const files = [...(e.target.files ?? [])];
+                e.target.value = "";
+                void uploadPdfs(files);
+              }}
+            />
+          </label>
+          <button type="button" onClick={() => setAddingLink(true)} className={`${add} text-faint`}>
+            <Link2 size={17} strokeWidth={1.6} aria-hidden="true" />
+            Add a link
+          </button>
+        </div>
       </div>
+      {error && (
+        <p role="alert" className="mt-1 text-sm text-danger">
+          {error}
+        </p>
+      )}
     </section>
   );
 }
 
-function PdfRow({ source, reading, onRead }: { source: SourceDto; reading: ReadKind | null; onRead: (k: ReadKind | null) => void }) {
-  const router = useRouter();
-  const [progress, setProgress] = useState<number | null>(null);
-  const [dragging, setDragging] = useState(false);
+function PdfRow({ source, pdf, kind, reading, onRead }: { source: SourceDto; pdf: SourcePdfDto; kind: ReadKind } & ReadProps) {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-
-  async function uploadPdf(file: File | undefined) {
-    if (!file) return;
-    if (file.size > MAX_UPLOAD_BYTES) return setError(`"${file.name}" is larger than 50 MB.`);
-    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") return setError(`"${file.name}" isn't a PDF.`);
-    setError(null);
-    setProgress(0);
-    const form = new FormData();
-    form.set("pdf", file, file.name);
-    try {
-      await upload(`/api/upload/sources/${encodeURIComponent(source.id)}/pdf`, form, setProgress);
-      changed();
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
-    } finally {
-      setProgress(null);
-    }
-  }
-
-  const fileInput = (
-    <input
-      type="file"
-      accept="application/pdf,.pdf"
-      className="sr-only"
-      disabled={progress !== null}
-      onChange={(e) => {
-        const file = e.target.files?.[0];
-        e.target.value = "";
-        void uploadPdf(file);
-      }}
-    />
-  );
-  const dropProps = {
-    onDragOver: (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(true);
-    },
-    onDragLeave: () => setDragging(false),
-    onDrop: (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(false);
-      void uploadPdf(e.dataTransfer.files[0]);
-    },
-  };
-
   return (
-    <div className="py-2.5" {...dropProps}>
-      {source.pdf ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-          <FileText size={17} strokeWidth={1.6} className="shrink-0 text-muted" aria-hidden="true" />
-          <button
-            type="button"
-            onClick={() => onRead("pdf")}
-            title="Read alongside your notes"
-            className="min-w-[10rem] flex-1 truncate text-left text-[15px] text-ink hover:underline hover:decoration-rule hover:underline-offset-4"
-          >
-            {source.pdf.name}
-          </button>
-          <div className="flex items-center gap-0.5">
-            <ReadButton kind="pdf" label="PDF" reading={reading} onRead={onRead} />
-            <a href={source.pdf.downloadUrl} className={iconButton} title="Download" aria-label="Download the PDF">
-              <Download size={15} aria-hidden="true" />
-            </a>
-            <button type="button" onClick={() => setConfirmRemove(true)} className={iconButton} title="Remove PDF" aria-label="Remove PDF">
-              <X size={15} aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      ) : (
-        <label
-          className={`-mx-1.5 flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-[15px] transition-colors hover:bg-accent-soft/70 hover:text-ink ${dragging ? "bg-accent-soft text-ink" : "text-faint"}`}
+    <div className="py-2.5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+        <FileText size={17} strokeWidth={1.6} className="shrink-0 text-muted" aria-hidden="true" />
+        <button
+          type="button"
+          onClick={() => onRead(kind)}
+          title="Read alongside your notes"
+          className="min-w-[10rem] flex-1 truncate text-left text-[15px] text-ink hover:underline hover:decoration-rule hover:underline-offset-4"
         >
-          <FilePlus2 size={17} strokeWidth={1.6} aria-hidden="true" />
-          Add a PDF
-          {fileInput}
-        </label>
-      )}
-      {progress !== null && <p className="mt-1 text-xs text-muted">Uploading {Math.round(progress * 100)}%…</p>}
+          {pdf.name}
+        </button>
+        <div className="flex items-center gap-0.5">
+          <ReadButton kind={kind} label="PDF" reading={reading} onRead={onRead} />
+          <a href={pdf.downloadUrl} className={iconButton} title="Download" aria-label={`Download ${pdf.name}`}>
+            <Download size={15} aria-hidden="true" />
+          </a>
+          <button type="button" onClick={() => setConfirmRemove(true)} className={iconButton} title="Remove PDF" aria-label={`Remove ${pdf.name}`}>
+            <X size={15} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
       {confirmRemove && (
         <div role="alertdialog" aria-label="Remove PDF" className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-danger/5 px-3 py-2 text-sm">
-          <span className="mr-auto">Remove the PDF from this source?</span>
+          <span className="mr-auto">Remove {pdf.name} from this source?</span>
           <button type="button" onClick={() => setConfirmRemove(false)} className={ui.btnGhost}>
             Cancel
           </button>
@@ -400,7 +443,8 @@ function PdfRow({ source, reading, onRead }: { source: SourceDto; reading: ReadK
             disabled={pending}
             onClick={() =>
               start(async () => {
-                const r = await removeSourcePdf(source.id);
+                if (reading === kind) onRead(null);
+                const r = await removeSourcePdf(source.id, pdf.file);
                 if (r.ok) changed();
                 else setError(r.error);
                 setConfirmRemove(false);
@@ -421,19 +465,31 @@ function PdfRow({ source, reading, onRead }: { source: SourceDto; reading: ReadK
   );
 }
 
-function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: ReadKind | null; onRead: (k: ReadKind | null) => void }) {
-  const [editing, setEditing] = useState(false);
+/** One link: shown, edited in place, or removed. Without `link` it's the "Add a link" field. */
+function LinkRow({
+  source,
+  link,
+  kind,
+  reading,
+  onRead,
+  onDone,
+}: { source: SourceDto; link?: string; kind?: ReadKind; onDone?: () => void } & ReadProps) {
+  const [editing, setEditing] = useState(!link);
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [draft, setDraft] = useState(source.url ?? "");
+  const [draft, setDraft] = useState(link ?? "");
   const { save, label, isError } = useInlineSave();
 
   async function commit(value: string) {
+    const to = value.trim();
     setEditing(false);
-    if (value.trim() === (source.url ?? "")) return;
+    if (to === (link ?? "")) return onDone?.();
+    if (!to && !link) return onDone?.();
     await save(async () => {
-      const r = await updateSourceProps(source.id, { url: value });
-      if (r.ok) changed();
-      else setEditing(true);
+      const r = await setSourceLink(source.id, { from: link, to });
+      if (r.ok) {
+        changed();
+        onDone?.();
+      } else setEditing(true);
       return r;
     });
   }
@@ -453,8 +509,9 @@ function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: Read
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
               if (e.key === "Escape") {
-                setDraft(source.url ?? "");
+                setDraft(link ?? "");
                 setEditing(false);
+                if (!link) onDone?.();
               }
             }}
             placeholder="https://"
@@ -462,24 +519,24 @@ function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: Read
             className="-mx-1.5 min-w-0 flex-1 rounded-sm bg-accent-soft px-1.5 py-0.5 text-[15px] text-ink placeholder:text-faint focus:outline-none"
           />
         </div>
-      ) : source.url ? (
+      ) : link && kind ? (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
           <Globe size={17} strokeWidth={1.6} className="shrink-0 text-muted" aria-hidden="true" />
           <a
-            href={source.url}
+            href={link}
             target="_blank"
             rel="noopener noreferrer"
-            title={source.url}
+            title={link}
             className="min-w-[10rem] flex-1 truncate text-[15px] text-accent-text underline decoration-1 underline-offset-2"
           >
-            {source.url.replace(/^https?:\/\/(www\.)?/, "")}
+            {link.replace(/^https?:\/\/(www\.)?/, "")}
           </a>
           <div className="flex items-center gap-0.5">
-            <ReadButton kind="link" label="web page" reading={reading} onRead={onRead} />
+            <ReadButton kind={kind} label="web page" reading={reading} onRead={onRead} />
             <button
               type="button"
               onClick={() => {
-                setDraft(source.url ?? "");
+                setDraft(link);
                 setEditing(true);
               }}
               className={iconButton}
@@ -493,22 +550,10 @@ function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: Read
             </button>
           </div>
         </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => {
-            setDraft("");
-            setEditing(true);
-          }}
-          className="-mx-1.5 flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[15px] text-faint transition-colors hover:bg-accent-soft/70 hover:text-ink"
-        >
-          <Link2 size={17} strokeWidth={1.6} aria-hidden="true" />
-          Add a link
-        </button>
-      )}
+      ) : null}
       {confirmRemove && (
         <div role="alertdialog" aria-label="Remove link" className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-danger/5 px-3 py-2 text-sm">
-          <span className="mr-auto">Remove the link from this source?</span>
+          <span className="mr-auto">Remove this link from the source?</span>
           <button type="button" onClick={() => setConfirmRemove(false)} className={ui.btnGhost}>
             Cancel
           </button>
@@ -516,6 +561,7 @@ function LinkRow({ source, reading, onRead }: { source: SourceDto; reading: Read
             type="button"
             onClick={() => {
               setConfirmRemove(false);
+              if (reading === kind) onRead(null);
               void commit("");
             }}
             className={ui.btnDanger}

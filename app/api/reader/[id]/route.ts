@@ -80,10 +80,12 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/reader/[
   const { id } = await ctx.params;
   const dark = request.nextUrl.searchParams.get("theme") === "dark";
   const source = await (await getContentStore()).getSource(id);
-  if (!source?.url) return page({ title: "Not found", body: `<p class="notice">This source has no link.</p>`, dark });
+  // ?n= picks one of the source's links (the first by default).
+  const url = source?.links[Number(request.nextUrl.searchParams.get("n")) || 0];
+  if (!source || !url) return page({ title: "Not found", body: `<p class="notice">This source has no link.</p>`, dark });
 
-  const result = await readable(source.url);
-  const original = `<a href="${escape(source.url)}" target="_blank" rel="noopener noreferrer">Open the original page ↗</a>`;
+  const result = await readable(url);
+  const original = `<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">Open the original page ↗</a>`;
   if (!result.ok) {
     return page({
       title: source.title,
@@ -104,7 +106,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/reader/[
   const body = result.html ?? result.text.split(/\n{2,}/).map((p) => `<p>${escape(p)}</p>`).join("");
   return page({
     title: result.title ?? source.title,
-    base: result.finalUrl ?? source.url,
+    base: result.finalUrl ?? url,
     dark,
     body: `<h1>${escape(result.title ?? source.title)}</h1><p class="meta">${result.byline ? `${escape(result.byline)} · ` : ""}${original}</p>${body}`,
   });

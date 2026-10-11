@@ -93,7 +93,10 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   expect(reader.headers()["content-security-policy"]).toMatch(/^sandbox .*default-src 'none'/);
   expect(reader.headers()["content-security-policy"]).not.toContain("allow-scripts");
   expect(ownerHas(`sources/${id}.md`)).toBe(true);
-  expect(ownerHas(`attachments/sources/${id}.pdf`)).toBe(true);
+  // Stored under its own name in the source's folder.
+  const pdfPath = read(`sources/${id}.md`).match(/pdfs:\n {2}- (\S+)/)![1];
+  expect(pdfPath).toMatch(new RegExp(`^attachments/sources/${id}/.+\\.pdf$`));
+  expect(ownerHas(pdfPath)).toBe(true);
   expect(read(`groups/${GROUP}.md`)).toContain(`id: ${id}`);
   await expect(page.getByRole("link", { name: `E2E Group ${stamp}` })).toBeVisible();
 });
@@ -166,7 +169,7 @@ test("delete a source removes its PDF and group membership", async ({ page }) =>
   await page.waitForURL("**/library");
   await expect(page.getByRole("link", { name: new RegExp(`^${TITLE}`) })).toHaveCount(0);
   expect(ownerHas(`sources/${id}.md`)).toBe(false);
-  expect(ownerHas(`attachments/sources/${id}.pdf`)).toBe(false);
+  expect(ownerHas(`attachments/sources/${id}`)).toBe(false);
   expect(read(`groups/${GROUP}.md`)).not.toContain(`id: ${id}`);
   expect(read(`groups/e2e-tag-group-${stamp}.md`)).not.toContain(`id: ${id}`);
 });

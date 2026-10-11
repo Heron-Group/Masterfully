@@ -10,6 +10,7 @@ import {
   type NoteDto,
   type NoteListItemDto,
   type SourceDto,
+  type SourcePdfDto,
 } from "./dto";
 import type { ContentStore } from "./content/store";
 
@@ -60,6 +61,10 @@ export function errorResponse(err: unknown): Response {
   return Response.json({ error: "Something went wrong on the server. Nothing was saved." }, { status: 500 });
 }
 
+function pdfToDto(file: string): SourcePdfDto {
+  return { file, url: fileUrl(file), downloadUrl: fileUrl(file, { download: true }), name: file.split("/").pop() ?? "source.pdf" };
+}
+
 export function sourceToDto(s: Source, groups: Group[]): SourceDto {
   return {
     id: s.id,
@@ -68,13 +73,9 @@ export function sourceToDto(s: Source, groups: Group[]): SourceDto {
     year: s.year,
     type: s.type,
     url: s.url,
-    pdf: s.pdf
-      ? {
-          url: fileUrl(s.pdf),
-          downloadUrl: fileUrl(s.pdf, { download: true }),
-          name: s.pdf.split("/").pop() ?? "source.pdf",
-        }
-      : undefined,
+    pdf: s.pdf ? pdfToDto(s.pdf) : undefined,
+    links: s.links,
+    pdfs: s.pdfs.map(pdfToDto),
     added: s.added,
     updated: s.updated,
     notes: s.notes,

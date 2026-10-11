@@ -158,6 +158,23 @@ Generated text, replaced on regeneration.
     });
   });
 
+  it("reads one url/pdf (older files) or links/pdfs lists, and writes lists", () => {
+    const old = parseSource(raw, meta("brody-2025-graphic-language", "sources"));
+    expect(old.links).toEqual(["https://example.org/paper"]);
+    expect(old.pdfs).toEqual(["attachments/sources/brody-2025-graphic-language.pdf"]);
+    const out = serializeSource(old);
+    expect(out).toMatch(/^links:\n  - https:\/\/example\.org\/paper$/m);
+    expect(out).not.toMatch(/^url:/m);
+    expect(out).not.toMatch(/^pdf:/m);
+
+    const both = parseSource(
+      raw.replace("pdf: attachments", "links:\n  - https://example.org/paper\n  - https://other.example/b\npdf: attachments"),
+      meta("brody-2025-graphic-language", "sources"),
+    );
+    expect(both.links).toEqual(["https://example.org/paper", "https://other.example/b"]);
+    expect(both.url).toBe("https://example.org/paper");
+  });
+
   it("re-serialises without losing the body or unknown fields", () => {
     const s = parseSource(
       raw.replace("year: 2025", "year: 2025\ndoi: 10.1000/xyz"),

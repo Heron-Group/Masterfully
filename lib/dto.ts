@@ -51,14 +51,19 @@ export const SOURCE_TYPE_OPTIONS: { value: SourceType; label: string }[] = [
 
 export type AiSummaryDto = { text: string; generated?: string; model?: string };
 
+export type SourcePdfDto = { file: string; url: string; downloadUrl: string; name: string };
+
 export type SourceDto = {
   id: string;
   title: string;
   authors: string[];
   year?: number;
   type: SourceType;
+  /** The first link and PDF (used for summaries and the library's icons). */
   url?: string;
-  pdf?: { url: string; downloadUrl: string; name: string };
+  pdf?: SourcePdfDto;
+  links: string[];
+  pdfs: SourcePdfDto[];
   added: string;
   updated: string;
   notes: string;
