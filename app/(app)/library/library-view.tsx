@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Globe } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText, Globe } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { isAnnotated, SourceBadges } from "@/components/source-badges";
@@ -13,11 +13,12 @@ export function fold(text: string): string {
   return text.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-export function typeLabel(type: string): string {
-  return SOURCE_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type;
-}
+const plural = (n: number) => `${n} source${n === 1 ? "" : "s"}`;
 
-export function LibraryView({ sources, groups }: { sources: SourceDto[]; groups: GroupRefDto[] }) {
+/** How many other sources a source links to (in its notes) and is linked from. */
+export type LinkCounts = Record<string, { to: number; from: number }>;
+
+export function LibraryView({ sources, groups, linkCounts = {} }: { sources: SourceDto[]; groups: GroupRefDto[]; linkCounts?: LinkCounts }) {
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("");
   const [type, setType] = useState("");
@@ -76,7 +77,7 @@ export function LibraryView({ sources, groups }: { sources: SourceDto[]; groups:
       <ul className="divide-y divide-rule border-y border-rule">
         {visible.map((s) => (
           <li key={s.id}>
-            <SourceRow source={s} />
+            <SourceRow source={s} links={linkCounts[s.id]} />
           </li>
         ))}
       </ul>
@@ -85,7 +86,7 @@ export function LibraryView({ sources, groups }: { sources: SourceDto[]; groups:
   );
 }
 
-export function SourceRow({ source: s }: { source: SourceDto }) {
+export function SourceRow({ source: s, links }: { source: SourceDto; links?: { to: number; from: number } }) {
   return (
     <div className="group flex items-start gap-3 py-3.5">
       <Link href={`/library/${s.id}`} className="min-w-0 flex-1">
@@ -95,8 +96,19 @@ export function SourceRow({ source: s }: { source: SourceDto }) {
         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
           {s.authors.length > 0 && <span>{formatAuthors(s.authors)}</span>}
           {s.year && <span className="tabular-nums">{s.year}</span>}
-          <span className={ui.badge}>{typeLabel(s.type)}</span>
           <SourceBadges summarised={!!s.aiSummary} annotated={isAnnotated(s.notes)} />
+          {!!links?.from && (
+            <span className={`${ui.badge} inline-flex items-center gap-1`} title={`${plural(links.from)} link to this source`}>
+              <ArrowLeft size={11} strokeWidth={1.8} aria-hidden="true" />
+              Linked from {links.from}
+            </span>
+          )}
+          {!!links?.to && (
+            <span className={`${ui.badge} inline-flex items-center gap-1`} title={`This source links to ${plural(links.to)}`}>
+              <ArrowRight size={11} strokeWidth={1.8} aria-hidden="true" />
+              Links to {links.to}
+            </span>
+          )}
         </span>
       </Link>
       {/* Open straight into the reading panel, beside the notes. */}

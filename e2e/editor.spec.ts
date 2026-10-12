@@ -79,6 +79,10 @@ test("link text to a source with Cmd/Ctrl+K, and insert one from the / menu", as
   await sourcePicker.getByRole("textbox").fill(`Brand new ${stamp}`);
   await sourcePicker.getByRole("option", { name: /New source/ }).click();
   await expect.poll(() => sourceFile(sourceId), { timeout: 10_000 }).toMatch(new RegExp(`See also \\[Brand new ${stamp}\\]\\(/library/[a-z0-9-]+\\)`));
+  // Both appear under References, below the notes, as they're linked.
+  const references = page.getByRole("group", { name: "References" });
+  await expect(references.getByRole("link", { name: TARGET })).toHaveAttribute("href", `/library/${targetId}`);
+  await expect(references.getByRole("link", { name: `Brand new ${stamp}` })).toBeVisible();
 
   // In the editor the link is a mention; a plain click opens the source in a new tab.
   const mention = page.locator(".cm-md-source-link", { hasText: "the primer" }).first();
@@ -168,13 +172,12 @@ test("Settings: research context, and usage through Masterfully", async ({ page 
   await expect(dialog.getByTestId("ai-usage")).toContainText("This month");
 });
 
-test("library and source show AI summarised and Annotated", async ({ page }) => {
+test("library shows AI summarised, Annotated and link counts; the source page leaves Annotated to the notes", async ({ page }) => {
   await as(page, `/library/${targetId}`);
-  const details = page.locator("header").filter({ has: page.getByLabel("Title", { exact: true }) });
-  await expect(details.getByText("Annotated")).toHaveCount(0);
-  // One word is enough.
-  await setEditorText(page, page.getByRole("textbox", { name: "My notes" }), "Promising");
-  await expect(details.getByText("Annotated")).toBeVisible(); // as soon as it's typed
+  // One word is enough to count as annotated in the library.
+  await setEditorText(page, page.getByRole("textbox", { name: "My notes" }), `Promising, after [the notes test](/library/${sourceId}).`);
+  await expect.poll(() => sourceFile(targetId), { timeout: 10_000 }).toContain(`[the notes test](/library/${sourceId})`);
+  await expect(page.getByText("Annotated", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Summarise" }).click();
   await expect(page.getByText(/AI-generated \d+ \w+ \d{4} · fake-model/)).toBeVisible({ timeout: 15_000 });
@@ -189,6 +192,10 @@ test("library and source show AI summarised and Annotated", async ({ page }) => 
   const empty = page.getByRole("listitem").filter({ hasText: `Brand new ${stamp}` });
   await expect(empty).toBeVisible();
   await expect(empty.getByText("Annotated")).toHaveCount(0);
+  // Link counts (sources only) replace the type label.
+  await expect(row.getByText("Links to 1")).toBeVisible();
+  await expect(other.getByText("Linked from 1")).toBeVisible();
+  await expect(row.getByText(/^(Article|Book|Chapter|Report|Web page|Thesis|Other)$/)).toHaveCount(0);
 
   // That summary is counted in Settings.
   await page.getByRole("button", { name: "Settings" }).filter({ visible: true }).first().click();

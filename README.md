@@ -389,6 +389,7 @@ the tests at it, e.g. `E2E_PORT=3200 E2E_CONTENT_DIR=/path/to/content npx playwr
 | [lib/accounts.ts](lib/accounts.ts) | Accounts (`accounts/<id>.md`), linking sign-ins by verified email, and moving single-user content into the owner's workspace. |
 | [proxy.ts](proxy.ts) | Redirects signed-out requests. Pages, server actions and API routes also check the session themselves. Upload routes skip the proxy (it would cut large bodies off at 10 MB). |
 | [lib/ai/](lib/ai/) | Prompts, PDF handling, safe URL fetching, streaming summaries from Claude or OpenAI, and each user's encrypted key ([user-config.ts](lib/ai/user-config.ts)). |
+| [lib/sources/](lib/sources/) | Reading a source's details (title, authors, year, type) from its PDF or link: a DOI is looked up at doi.org, otherwise the page's citation tags or the PDF's properties are used. Offered on the source page, never saved without asking. |
 | [lib/map/](lib/map/) | The source map: [graph.ts](lib/map/graph.ts) builds the network and crossover figures (shared sources, bridge links, hubs) from sources and groups on every request, with unit tests in [tests/map.test.ts](tests/map.test.ts); group colours and the map's own layout file. Drawn with Cytoscape.js in [components/map/](components/map/). |
 | [app/](app/) | Pages (journal, notes, library, groups, map, settings) and API routes. |
 | [instrumentation.ts](instrumentation.ts) | On start: clone or open the content repo. Each workspace's index is built on its user's first request. |

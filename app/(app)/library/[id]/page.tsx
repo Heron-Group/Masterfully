@@ -35,7 +35,7 @@ async function SourceLoader({
   const { id } = await params;
   const read = (await searchParams).read;
   const store = await getContentStore();
-  const [source, groups, referencedBy] = await Promise.all([store.getSource(id), store.listGroups(), store.referencesTo(id)]);
+  const [source, groups, referencedBy, sources] = await Promise.all([store.getSource(id), store.listGroups(), store.referencesTo(id), store.listSources()]);
   if (!source) notFound();
   return (
     <SourceView
@@ -43,6 +43,7 @@ async function SourceLoader({
       source={sourceToDto(source, groups)}
       allGroups={groups.map((g) => ({ id: g.id, title: g.title }))}
       referencedBy={referencedBy}
+      sourceTitles={Object.fromEntries(sources.map((s) => [s.id, s.title]))}
       initialRead={typeof read === "string" && /^(pdf|link)(-\d+)?$/.test(read) ? read : undefined}
     />
   );

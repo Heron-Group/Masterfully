@@ -35,13 +35,13 @@ async function assertPublicHost(url: URL): Promise<void> {
   }
 }
 
+export type FetchedRaw = { ok: true; body: Buffer; contentType: string; finalUrl: string } | { ok: false; reason: string };
+
 /**
- * Fetch a source's link and extract its readable text (or PDF bytes).
- * Refuses private addresses, follows at most 5 redirects, gives up after 20
- * seconds or 8 MB, and treats near-empty pages as unavailable (paywalls,
- * logins and script-only pages).
+ * Fetch a public URL's body. Refuses private addresses, follows at most 5
+ * redirects, and gives up after 20 seconds or 8 MB.
  */
-export async function fetchReadable(rawUrl: string): Promise<FetchedPage> {
+export async function fetchPublic(rawUrl: string): Promise<FetchedRaw> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -72,30 +72,40 @@ export async function fetchReadable(rawUrl: string): Promise<FetchedPage> {
       return { ok: false, reason: `the site refused access (HTTP ${res.status}); it may need a login or subscription` };
     }
     if (!res.ok) return { ok: false, reason: `the site returned HTTP ${res.status}` };
-
-    const body = await readLimited(res);
-    const type = res.headers.get("content-type") ?? "";
-    if (type.includes("application/pdf") || body.subarray(0, 5).toString() === "%PDF-") {
-      return { ok: true, kind: "pdf", data: body };
-    }
-    const raw = body.toString("utf8");
-    if (type.includes("text/plain")) return checkLength({ ok: true, kind: "html", text: raw.trim(), finalUrl: url.toString() });
-
-    const { document } = parseHTML(raw);
-    const article = new Readability(document as unknown as Document).parse();
-    const text = (article?.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
-    return checkLength({
-      ok: true,
-      kind: "html",
-      text,
-      title: article?.title ?? undefined,
-      html: article?.content ?? undefined,
-      byline: article?.byline ?? undefined,
-      finalUrl: url.toString(),
-    });
+    return { ok: true, body: await readLimited(res), contentType: res.headers.get("content-type") ?? "", finalUrl: url.toString() };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, reason: /timeout|aborted/i.test(message) ? "the site took too long to respond" : message };
+  }
+}
+
+export const isPdf = (raw: { body: Buffer; contentType: string }) =>
+  raw.contentType.includes("application/pdf") || raw.body.subarray(0, 5).toString() === "%PDF-";
+
+/**
+ * Fetch a source's link and extract its readable text (or PDF bytes).
+ * Treats near-empty pages as unavailable (paywalls, logins and script-only pages).
+ */
+export async function fetchReadable(rawUrl: string): Promise<FetchedPage> {
+  const raw = await fetchPublic(rawUrl);
+  if (!raw.ok) return raw;
+  if (isPdf(raw)) return { ok: true, kind: "pdf", data: raw.body };
+  const text = raw.body.toString("utf8");
+  if (raw.contentType.includes("text/plain")) return checkLength({ ok: true, kind: "html", text: text.trim(), finalUrl: raw.finalUrl });
+  try {
+    const { document } = parseHTML(text);
+    const article = new Readability(document as unknown as Document).parse();
+    return checkLength({
+      ok: true,
+      kind: "html",
+      text: (article?.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim(),
+      title: article?.title ?? undefined,
+      html: article?.content ?? undefined,
+      byline: article?.byline ?? undefined,
+      finalUrl: raw.finalUrl,
+    });
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
 }
 

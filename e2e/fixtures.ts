@@ -24,7 +24,7 @@ export const ownerHas = (rel: string) => existsSync(workspace(rel));
 export const workspace = (rel = "") => path.join(REPO_DIR, "users", ownerId(), rel);
 
 /** A real one-page PDF, padded with an unused stream to roughly `bytes` long. */
-export function makePdf(bytes = 2000, text = "Test PDF"): Buffer {
+export function makePdf(bytes = 2000, text = "Test PDF", info?: { Title?: string; Author?: string }): Buffer {
   const objects: string[] = [];
   const content = `BT /F1 24 Tf 72 720 Td (${text}) Tj ET`;
   objects.push("<< /Type /Catalog /Pages 2 0 R >>");
@@ -34,6 +34,8 @@ export function makePdf(bytes = 2000, text = "Test PDF"): Buffer {
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
   const padLength = Math.max(0, bytes - 1200);
   objects.push(`<< /Length ${padLength} >>\nstream\n${"0".repeat(padLength)}\nendstream`);
+  // Document properties, as a PDF's Title and Author fields.
+  if (info) objects.push(`<< ${Object.entries(info).map(([k, v]) => `/${k} (${v})`).join(" ")} >>`);
   let out = "%PDF-1.4\n";
   const offsets: number[] = [];
   objects.forEach((body, i) => {
@@ -43,7 +45,7 @@ export function makePdf(bytes = 2000, text = "Test PDF"): Buffer {
   const xref = Buffer.byteLength(out);
   out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
   for (const o of offsets) out += `${String(o).padStart(10, "0")} 00000 n \n`;
-  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R${info ? ` /Info ${objects.length} 0 R` : ""} >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(out);
 }
 

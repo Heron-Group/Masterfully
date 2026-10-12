@@ -1,21 +1,33 @@
 "use client";
 
-import { BookOpen, Download, FilePlus2, FileText, Globe, Link2, Pencil, StickyNote, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Download, FilePlus2, FileText, Globe, Link2, Pencil, StickyNote, Trash2, Wand2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useState, useTransition } from "react";
-import { InlineAutoText, InlineSelectText, InlineTitle, useInlineSave } from "@/components/inline-fields";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { InlineAutoText, InlineSelectText, InlineTitle, PropertyRow, useInlineSave } from "@/components/inline-fields";
 import { GroupTags } from "@/components/group-tags";
-import { isAnnotated, SourceBadges } from "@/components/source-badges";
+import { SourceBadges } from "@/components/source-badges";
 import { LiveEditor } from "@/components/live-editor/live-editor";
 import { ReaderPanel, type ReaderTab } from "@/components/reader-panel";
 import { CONTENT_CHANGED_EVENT } from "@/components/content-events";
 import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
 import { MAX_UPLOAD_BYTES, SOURCE_TYPE_OPTIONS, type GroupRefDto, type ReferenceDto, type SourceDto, type SourcePdfDto, type SourceType } from "@/lib/dto";
+import { extractSourceLinks } from "@/lib/map/graph";
 import { formatShortDate } from "@/lib/time";
 import { upload } from "@/lib/upload-client";
-import { deleteSource, removeSourcePdf, saveSourceNotes, setSourceInGroup, setSourceLink, updateSourceProps, type ActionResult, type SourceProps } from "../actions";
+import {
+  deleteSource,
+  removeSourcePdf,
+  saveSourceNotes,
+  setSourceInGroup,
+  setSourceLink,
+  suggestSourceDetails,
+  updateSourceProps,
+  type ActionResult,
+  type DetailsSuggestion,
+  type SourceProps,
+} from "../actions";
 import { createGroup } from "../../groups/actions";
 import { SourceSummaryPanel } from "./source-summary";
 
@@ -53,20 +65,27 @@ function readerTabs(source: SourceDto): ReaderTab[] {
   return tabs;
 }
 
+/** Which PDF or link to read details from (index into source.pdfs / source.links). */
+type DetailsTarget = { kind: "pdf" | "link"; index: number };
+type Suggesting = { status: "reading"; from?: string } | { status: "found"; suggestion: DetailsSuggestion } | { status: "none"; message: string } | null;
+
 export function SourceView({
   source,
   allGroups,
   referencedBy = [],
+  sourceTitles = {},
   initialRead,
 }: {
   source: SourceDto;
   allGroups: GroupRefDto[];
   referencedBy?: ReferenceDto[];
+  /** Every source's title by id, for the References list (which follows the notes as they're typed). */
+  sourceTitles?: Record<string, string>;
   initialRead?: ReadKind;
 }) {
   const tabs = readerTabs(source);
-  // Follows the notes as they're typed, so "Annotated" appears straight away.
-  const [annotated, setAnnotated] = useState(() => isAnnotated(source.notes));
+  const [notes, setNotes] = useState(source.notes);
+  const [suggesting, setSuggesting] = useState<Suggesting>(null);
   const [reading, setReadingState] = useState<ReadKind | null>(
     initialRead && tabs.some((t) => t.key === initialRead) ? initialRead : null,
   );
@@ -82,6 +101,26 @@ export function SourceView({
   // Close the panel if what it shows is removed.
   const open = reading && tabs.some((t) => t.key === reading) ? reading : null;
 
+  /**
+   * Read details from a PDF or link (just added, or all of them when asked)
+   * and offer any that differ from what's there. `quiet`: say nothing if
+   * nothing new is found (after adding a PDF or link).
+   */
+  async function findDetails(target?: DetailsTarget, quiet = false) {
+    setSuggesting({ status: "reading" });
+    const r = await suggestSourceDetails(source.id, target);
+    if (!r.ok) return setSuggesting(quiet ? null : { status: "none", message: r.error });
+    const s = r.suggestion;
+    if (s && fieldsToOffer(source, s).length) return setSuggesting({ status: "found", suggestion: s });
+    if (quiet) return setSuggesting(null);
+    setSuggesting({
+      status: "none",
+      message: s
+        ? `The details in ${s.from} match what's here already.`
+        : `No details found${r.problems.length ? ` (${r.problems.join("; ")})` : ""}.`,
+    });
+  }
+
   if (source.problem) {
     return (
       <div className="mt-6 rounded-md bg-warn/10 px-4 py-3 text-sm">
@@ -93,12 +132,24 @@ export function SourceView({
       </div>
     );
   }
+  const hasMaterial = source.pdfs.length + source.links.length > 0;
   return (
     <>
       <article className="mt-4 space-y-10">
-        <Details source={source} allGroups={allGroups} annotated={annotated} referencedBy={referencedBy} />
-        <MaterialSection source={source} reading={open} onRead={setReading} />
-        <NotesSection source={source} onAnnotated={setAnnotated} />
+        <div>
+          <Details source={source} allGroups={allGroups} onFindDetails={hasMaterial && suggesting?.status !== "reading" ? () => void findDetails() : undefined} />
+          {suggesting && (
+            <SuggestedDetails
+              key={suggesting.status === "found" ? `found:${suggesting.suggestion.from}` : suggesting.status}
+              source={source}
+              state={suggesting}
+              onClose={() => setSuggesting(null)}
+            />
+          )}
+        </div>
+        <MaterialSection source={source} reading={open} onRead={setReading} onAdded={(target) => void findDetails(target, true)} />
+        <NotesSection source={source} onChange={setNotes} />
+        <Connections sourceId={source.id} notes={notes} sourceTitles={sourceTitles} referencedBy={referencedBy} />
         <SourceSummaryPanel source={source} />
       </article>
       {open && <ReaderPanel title={source.title} tabs={tabs} active={open} onTab={setReading} onClose={close} />}
@@ -115,18 +166,8 @@ function ErrorText({ result }: { result: ActionResult | null }) {
   );
 }
 
-/** Title, then one quiet line of details (edited in place) with delete. */
-function Details({
-  source,
-  allGroups,
-  annotated,
-  referencedBy,
-}: {
-  source: SourceDto;
-  allGroups: GroupRefDto[];
-  annotated: boolean;
-  referencedBy: ReferenceDto[];
-}) {
+/** Title, then the details as a labelled list (each edited in place). */
+function Details({ source, allGroups, onFindDetails }: { source: SourceDto; allGroups: GroupRefDto[]; onFindDetails?: () => void }) {
   const { save, label, isError } = useInlineSave();
   const update = (props: SourceProps) =>
     save(async () => {
@@ -134,52 +175,71 @@ function Details({
       if (r.ok) changed();
       return r;
     });
-  const dot = <span aria-hidden="true" className="px-0.5 text-faint">·</span>;
 
   return (
     <header>
       <h1 className="sr-only">{source.title}</h1>
-      <InlineTitle value={source.title} onSave={(title) => void update({ title })} ariaLabel="Title" />
-      <div className="mt-1 flex flex-wrap items-center gap-y-1 text-[13px] text-muted">
-        <InlineAutoText
-          value={source.authors.join("; ")}
-          onSave={(v) => void update({ authors: v.split(";") })}
-          placeholder="Authors"
-          ariaLabel="Authors"
-          title="Authors — separate several with a semicolon"
-          className="-ml-1.5"
-        />
-        {dot}
-        <InlineAutoText
-          value={source.year ? String(source.year) : ""}
-          onSave={(year) => void update({ year })}
-          placeholder="Year"
-          ariaLabel="Year"
-          inputMode="numeric"
-          className="tabular-nums"
-        />
-        {dot}
-        <InlineSelectText<SourceType>
-          value={source.type}
-          options={SOURCE_TYPE_OPTIONS}
-          onSave={(type) => void update({ type })}
-          ariaLabel="Type"
-        />
-        {dot}
-        <span className="px-1.5 text-faint" title="Date added">
-          Added {formatShortDate(source.added)}
-        </span>
-        <span className="flex items-center gap-1 px-1">
-          <SourceBadges summarised={!!source.aiSummary} annotated={annotated} />
-        </span>
-        <span className="ml-auto">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <InlineTitle value={source.title} onSave={(title) => void update({ title })} ariaLabel="Title" />
+        </div>
+        <div className="pt-2.5">
           <DeleteControl source={source} />
-        </span>
+        </div>
       </div>
-      <div className="mt-2.5">
-        <SourceGroupTags source={source} allGroups={allGroups} />
+      <div className="mt-3 text-muted [&_label]:text-[13px]" role="group" aria-label="Details">
+        <PropertyRow label="Authors">
+          <InlineAutoText
+            value={source.authors.join("; ")}
+            onSave={(v) => void update({ authors: v.split(";") })}
+            placeholder="Add authors"
+            ariaLabel="Authors"
+            title="Authors — separate several with a semicolon"
+            className="-ml-1.5 text-sm text-ink"
+          />
+        </PropertyRow>
+        <PropertyRow label="Year">
+          <InlineAutoText
+            value={source.year ? String(source.year) : ""}
+            onSave={(year) => void update({ year })}
+            placeholder="Add year"
+            ariaLabel="Year"
+            inputMode="numeric"
+            className="-ml-1.5 text-sm tabular-nums text-ink"
+          />
+        </PropertyRow>
+        <PropertyRow label="Type">
+          <InlineSelectText<SourceType>
+            value={source.type}
+            options={SOURCE_TYPE_OPTIONS}
+            onSave={(type) => void update({ type })}
+            ariaLabel="Type"
+            className="-ml-1.5 text-sm text-ink"
+          />
+        </PropertyRow>
+        <PropertyRow label="Groups">
+          <div className="-ml-1.5 text-sm">
+            <SourceGroupTags source={source} allGroups={allGroups} />
+          </div>
+        </PropertyRow>
+        <PropertyRow label="Added">
+          <span className="flex flex-wrap items-center gap-2 py-0.5 text-sm text-muted">
+            {formatShortDate(source.added)}
+            <SourceBadges summarised={!!source.aiSummary} annotated={false} />
+          </span>
+        </PropertyRow>
       </div>
-      {referencedBy.length > 0 && <ReferencedBy items={referencedBy} />}
+      {onFindDetails && (
+        <button
+          type="button"
+          onClick={onFindDetails}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[13px] text-muted transition-colors hover:bg-accent-soft/70 hover:text-ink"
+          title="Read the title, authors, year and type from this source's PDF or link"
+        >
+          <Wand2 size={14} strokeWidth={1.7} aria-hidden="true" />
+          Fill in details from the PDF or link
+        </button>
+      )}
       {label && (
         <p role={isError ? "alert" : "status"} className={`mt-1 text-xs ${isError ? "text-danger" : "text-faint"}`}>
           {label}
@@ -189,25 +249,192 @@ function Details({
   );
 }
 
-/** Sources and notes that link to this source, as links to open them. */
-function ReferencedBy({ items }: { items: ReferenceDto[] }) {
+type Field = "title" | "authors" | "year" | "type";
+const FIELD_LABELS: Record<Field, string> = { title: "Title", authors: "Authors", year: "Year", type: "Type" };
+const typeName = (t: string) => SOURCE_TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t;
+
+/** The suggested value of a field as text, and the current one. */
+function fieldText(field: Field, v: { title?: string; authors?: string[]; year?: number; type?: string }): string {
+  if (field === "authors") return (v.authors ?? []).join("; ");
+  if (field === "year") return v.year ? String(v.year) : "";
+  if (field === "type") return v.type ? typeName(v.type) : "";
+  return v.title ?? "";
+}
+
+/** Fields the suggestion has that differ from the source. */
+function fieldsToOffer(source: SourceDto, s: DetailsSuggestion): Field[] {
+  return (["title", "authors", "year", "type"] as const).filter((f) => {
+    const next = fieldText(f, s);
+    return next && next.toLowerCase() !== fieldText(f, source).toLowerCase();
+  });
+}
+
+/** Details read from a PDF or link: tick which to use. Nothing changes until "Use selected". */
+function SuggestedDetails({ source, state, onClose }: { source: SourceDto; state: NonNullable<Suggesting>; onClose: () => void }) {
+  const offered = state.status === "found" ? fieldsToOffer(source, state.suggestion) : [];
+  const [chosen, setChosen] = useState<Set<Field>>(() => new Set(offered));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (state.status === "reading") {
+    return (
+      <p role="status" className="mt-3 flex items-center gap-2 text-[13px] text-muted">
+        <Wand2 size={14} strokeWidth={1.7} className="animate-pulse text-accent" aria-hidden="true" />
+        Reading the source&apos;s details…
+      </p>
+    );
+  }
+  if (state.status === "none") {
+    return (
+      <p role="status" className="mt-3 flex items-start gap-2 text-[13px] text-muted">
+        <span className="min-w-0 flex-1">{state.message}</span>
+        <button type="button" onClick={onClose} aria-label="Dismiss" className="rounded p-0.5 text-faint hover:text-ink">
+          <X size={14} aria-hidden="true" />
+        </button>
+      </p>
+    );
+  }
+  const s = state.suggestion;
+  if (!offered.length) return null;
+
+  async function apply() {
+    setSaving(true);
+    setError(null);
+    const props: SourceProps = {};
+    if (chosen.has("title") && s.title) props.title = s.title;
+    if (chosen.has("authors") && s.authors) props.authors = s.authors;
+    if (chosen.has("year") && s.year) props.year = String(s.year);
+    if (chosen.has("type") && s.type) props.type = s.type;
+    const r = await updateSourceProps(source.id, props);
+    setSaving(false);
+    if (!r.ok) return setError(r.error);
+    changed();
+    onClose();
+  }
+
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[13px]" role="group" aria-label="Referenced by">
-      <span className="mr-0.5 text-faint">Referenced by</span>
-      {items.map((r) => {
-        const Icon = r.kind === "source" ? BookOpen : StickyNote;
-        return (
-          <Link
-            key={`${r.kind}:${r.id}`}
-            href={r.kind === "source" ? `/library/${r.id}` : `/notes/${r.id}`}
-            title={r.kind === "source" ? "Open source" : "Open note"}
-            className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-md bg-accent-soft/70 px-2 py-1 text-ink transition-colors hover:bg-accent-soft"
-          >
-            <Icon size={13} strokeWidth={1.7} className="shrink-0 text-accent" aria-hidden="true" />
-            <span className="truncate">{r.title}</span>
-          </Link>
-        );
-      })}
+    <section aria-label="Suggested details" className="mt-4 rounded-lg bg-accent-soft/50 p-4 ring-1 ring-rule">
+      <div className="flex items-start gap-2">
+        <Wand2 size={16} strokeWidth={1.7} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-ink">Details found in {s.from}</p>
+          <p className="text-xs text-muted">Tick the ones to use. Nothing changes until you choose.</p>
+        </div>
+      </div>
+      <ul className="mt-3 space-y-2">
+        {offered.map((f) => {
+          const now = fieldText(f, source);
+          return (
+            <li key={f}>
+              <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={chosen.has(f)}
+                  onChange={() =>
+                    setChosen((c) => {
+                      const next = new Set(c);
+                      if (next.has(f)) next.delete(f);
+                      else next.add(f);
+                      return next;
+                    })
+                  }
+                  className="mt-1 accent-[var(--accent)]"
+                />
+                <span className="w-16 shrink-0 pt-px text-[13px] text-muted">{FIELD_LABELS[f]}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-ink">{fieldText(f, s)}</span>
+                  {now && <span className="block text-xs text-faint">Now: {now}</span>}
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" disabled={!chosen.size || saving} onClick={() => void apply()} className={ui.btnPrimary}>
+          {saving ? "Saving…" : chosen.size === offered.length ? "Use these details" : "Use selected"}
+        </button>
+        <button type="button" onClick={onClose} className={ui.btnGhost}>
+          Dismiss
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** What this source's notes link to, and what links here: sources and notes, as links to open them. */
+function Connections({
+  sourceId,
+  notes,
+  sourceTitles,
+  referencedBy,
+}: {
+  sourceId: string;
+  notes: string;
+  sourceTitles: Record<string, string>;
+  referencedBy: ReferenceDto[];
+}) {
+  const references = useMemo(() => {
+    const seen = new Set<string>();
+    const out: ReferenceDto[] = [];
+    for (const { to, label } of extractSourceLinks(notes)) {
+      if (to === sourceId || seen.has(to)) continue;
+      seen.add(to);
+      // A source made from the "/" menu since the page loaded: its link's words stand in for the title.
+      out.push({ kind: "source", id: to, title: sourceTitles[to] ?? label ?? to });
+    }
+    return out;
+  }, [notes, sourceId, sourceTitles]);
+  return (
+    <section aria-labelledby="connections-heading">
+      <h2 id="connections-heading" className={`${ui.h2} mb-3`}>
+        Connections
+      </h2>
+      <div className="space-y-3">
+        <ReferenceList
+          label="References"
+          icon={ArrowRight}
+          items={references}
+          empty="No sources yet. Type / in your notes to link one."
+        />
+        <ReferenceList label="Referenced by" icon={ArrowLeft} items={referencedBy} empty="Nothing links here yet." />
+      </div>
+    </section>
+  );
+}
+
+function ReferenceList({ label, icon: Arrow, items, empty }: { label: string; icon: typeof ArrowRight; items: ReferenceDto[]; empty: string }) {
+  return (
+    <div className="grid grid-cols-[6.5rem_1fr] items-start gap-x-3 sm:grid-cols-[8rem_1fr]" role="group" aria-label={label}>
+      <span className="flex items-center gap-1.5 py-1 text-[13px] text-muted">
+        <Arrow size={13} strokeWidth={1.7} aria-hidden="true" />
+        {label}
+      </span>
+      {items.length ? (
+        <div className="flex flex-wrap gap-1.5 text-[13px]">
+          {items.map((r) => {
+            const Icon = r.kind === "source" ? BookOpen : StickyNote;
+            return (
+              <Link
+                key={`${r.kind}:${r.id}`}
+                href={r.kind === "source" ? `/library/${r.id}` : `/notes/${r.id}`}
+                title={r.kind === "source" ? "Open source" : "Open note"}
+                className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-md bg-accent-soft/70 px-2 py-1 text-ink transition-colors hover:bg-accent-soft"
+              >
+                <Icon size={13} strokeWidth={1.7} className="shrink-0 text-accent" aria-hidden="true" />
+                <span className="truncate">{r.title}</span>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="py-1 text-[13px] text-faint">{empty}</p>
+      )}
     </div>
   );
 }
@@ -346,7 +573,7 @@ const iconButton = "rounded-md p-1.5 text-muted transition-colors hover:bg-accen
 type ReadProps = { reading: ReadKind | null; onRead: (k: ReadKind | null) => void };
 
 /** The source itself: any number of PDFs and links, each readable beside your notes. */
-function MaterialSection({ source, reading, onRead }: { source: SourceDto } & ReadProps) {
+function MaterialSection({ source, reading, onRead, onAdded }: { source: SourceDto; onAdded: (target: DetailsTarget) => void } & ReadProps) {
   const router = useRouter();
   const [uploads, setUploads] = useState<{ name: string; progress: number }[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -357,6 +584,9 @@ function MaterialSection({ source, reading, onRead }: { source: SourceDto } & Re
     const pdfs = files.filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
     if (pdfs.length < files.length) setError("Only PDF files can be added here.");
     else setError(null);
+    // New PDFs go at the end of the list; details are read from the first one added.
+    let next = source.pdfs.length;
+    let offered = false;
     for (const file of pdfs) {
       if (file.size > MAX_UPLOAD_BYTES) {
         setError(`"${file.name}" is larger than 50 MB.`);
@@ -371,6 +601,9 @@ function MaterialSection({ source, reading, onRead }: { source: SourceDto } & Re
         );
         changed();
         router.refresh();
+        if (!offered) onAdded({ kind: "pdf", index: next });
+        offered = true;
+        next++;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed.");
       } finally {
@@ -404,14 +637,22 @@ function MaterialSection({ source, reading, onRead }: { source: SourceDto } & Re
           <PdfRow key={pdf.file} source={source} pdf={pdf} kind={tabKey("pdf", i)} reading={reading} onRead={onRead} />
         ))}
         {source.links.map((link, i) => (
-          <LinkRow key={link} source={source} link={link} kind={tabKey("link", i)} reading={reading} onRead={onRead} />
+          <LinkRow key={link} source={source} link={link} kind={tabKey("link", i)} reading={reading} onRead={onRead} onSaved={() => onAdded({ kind: "link", index: i })} />
         ))}
         {uploads.map((u) => (
           <p key={u.name} className="py-2.5 text-sm text-muted">
             Uploading {u.name} · {Math.round(u.progress * 100)}%…
           </p>
         ))}
-        {addingLink && <LinkRow source={source} reading={reading} onRead={onRead} onDone={() => setAddingLink(false)} />}
+        {addingLink && (
+          <LinkRow
+            source={source}
+            reading={reading}
+            onRead={onRead}
+            onDone={() => setAddingLink(false)}
+            onSaved={() => onAdded({ kind: "link", index: source.links.length })}
+          />
+        )}
         <div className="flex flex-wrap gap-x-4 py-2">
           <label className={`${add} ${dragging ? "bg-accent-soft text-ink" : "text-faint"}`}>
             <FilePlus2 size={17} strokeWidth={1.6} aria-hidden="true" />
@@ -510,7 +751,8 @@ function LinkRow({
   reading,
   onRead,
   onDone,
-}: { source: SourceDto; link?: string; kind?: ReadKind; onDone?: () => void } & ReadProps) {
+  onSaved,
+}: { source: SourceDto; link?: string; kind?: ReadKind; onDone?: () => void; onSaved?: () => void } & ReadProps) {
   const [editing, setEditing] = useState(!link);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [draft, setDraft] = useState(link ?? "");
@@ -526,6 +768,8 @@ function LinkRow({
       if (r.ok) {
         changed();
         onDone?.();
+        // A new or changed link (not a removal): offer its details.
+        if (to) onSaved?.();
       } else setEditing(true);
       return r;
     });
@@ -616,11 +860,11 @@ function LinkRow({
   );
 }
 
-function NotesSection({ source, onAnnotated }: { source: SourceDto; onAnnotated: (annotated: boolean) => void }) {
+function NotesSection({ source, onChange }: { source: SourceDto; onChange: (notes: string) => void }) {
   const [notes, setNotesState] = useState(source.notes);
   const setNotes = (value: string) => {
     setNotesState(value);
-    onAnnotated(isAnnotated(value));
+    onChange(value);
   };
   const { state, error, flush } = useAutosave(notes, async (value) => {
     const r = await saveSourceNotes(source.id, value);
