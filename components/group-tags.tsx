@@ -71,7 +71,7 @@ export function GroupTags({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5" aria-label="Reading groups" role="group">
+    <div className="relative flex flex-wrap items-center gap-1.5" aria-label="Reading groups" role="group">
       {selected.map((g) => (
         <span key={g.id} className="group/tag inline-flex items-center rounded-md bg-accent-soft/70 text-[13px] text-ink">
           {linkTags ? (
@@ -97,7 +97,8 @@ export function GroupTags({
         </span>
       ))}
 
-      <div ref={box} className="relative">
+      {/* The list opens under the whole row (not the button), so it stays on screen on a phone. */}
+      <div ref={box}>
         <button
           type="button"
           onClick={() => {
@@ -114,7 +115,7 @@ export function GroupTags({
         </button>
         {open && (
           <div
-            className="absolute left-0 top-full z-30 mt-1 w-72 rounded-lg bg-surface p-1.5 shadow-lg shadow-black/10 ring-1 ring-rule"
+            className="absolute left-0 top-full z-30 mt-1 w-72 max-w-full rounded-lg bg-surface p-1.5 shadow-lg shadow-black/10 ring-1 ring-rule"
             onKeyDown={(e) => {
               if (e.key === "Escape") setOpen(false);
             }}

@@ -5,7 +5,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { ContentError, getContentStore } from "@/lib/content";
-import { toSourceType } from "@/lib/content/schemas";
+import { setByHand, SOURCE_DETAIL_FIELDS, toSourceType, type SourceDetailField } from "@/lib/content/schemas";
 import type { SourceType } from "@/lib/dto";
 import { detailsFromLink, detailsFromPdfBytes } from "@/lib/sources/details";
 
@@ -85,20 +85,33 @@ export async function deleteSource(id: string): Promise<ActionResult> {
   return result;
 }
 
-export type DetailsSuggestion = { from: string; title?: string; authors?: string[]; year?: number; type?: SourceType };
-export type SuggestResult = { ok: true; suggestion: DetailsSuggestion | null; problems: string[] } | { ok: false; error: string };
+type Found = { title?: string; authors?: string[]; year?: number; type?: SourceType };
+export type FilledField = { field: SourceDetailField; before: string; after: string };
+/** Values before a fill-in, for Undo. A missing year is null (undefined wouldn't survive the trip to the page). */
+export type PreviousDetails = { title?: string; authors?: string[]; year?: number | null; type?: SourceType };
+export type FillResult =
+  | { ok: true; from: string | null; filled: FilledField[]; previous: PreviousDetails; problems: string[] }
+  | { ok: false; error: string };
+
+const detailText = (field: SourceDetailField, v: Found): string =>
+  field === "authors" ? (v.authors ?? []).join("; ") : field === "year" ? (v.year ? String(v.year) : "") : field === "type" ? (v.type ?? "") : (v.title ?? "");
 
 /**
- * Read a source's details (title, authors, year, type) from one of its PDFs
- * or links: `target` names which, or all are tried in turn (PDFs first)
- * until one gives something. Nothing is saved; the page offers what's found.
+ * Fill in a source's details (title, authors, year, type) from one of its
+ * PDFs or links: `target` names which, or all are tried in turn (PDFs first)
+ * until one gives something. Details the user set themselves are never
+ * changed. Returns what changed and the values before, for Undo.
  */
-export async function suggestSourceDetails(id: string, target?: { kind: "pdf" | "link"; index: number }): Promise<SuggestResult> {
+export async function fillSourceDetails(id: string, target?: { kind: "pdf" | "link"; index: number }): Promise<FillResult> {
   await requireSession();
   try {
     const store = await getContentStore();
     const source = await store.getSource(id);
     if (!source) return { ok: false, error: "Source not found." };
+    const open = SOURCE_DETAIL_FIELDS.filter((f) => !setByHand(source).includes(f));
+    const none = { ok: true as const, from: null, filled: [], previous: {} };
+    if (!open.length) return { ...none, problems: [] };
+
     const candidates = [
       ...source.pdfs.map((file, index) => ({ kind: "pdf" as const, index, file })),
       ...source.links.map((url, index) => ({ kind: "link" as const, index, url })),
@@ -106,35 +119,60 @@ export async function suggestSourceDetails(id: string, target?: { kind: "pdf" | 
     const problems: string[] = [];
     for (const c of candidates) {
       let from: string;
-      let details;
+      let details: Found | null = null;
       if (c.kind === "pdf") {
         from = c.file.split("/").pop() ?? "the PDF";
         const abs = await store.attachmentPath(c.file);
-        if (!abs) {
-          problems.push(`${from} is missing`);
-          continue;
-        }
-        details = await detailsFromPdfBytes(await fs.readFile(abs)).catch(() => null);
-        if (!details) {
-          problems.push(`${from} couldn't be read`);
-          continue;
-        }
+        details = abs ? await detailsFromPdfBytes(await fs.readFile(abs)).catch(() => null) : null;
+        if (!details) problems.push(`${from} couldn't be read`);
       } else {
         from = c.url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
         const read = await detailsFromLink(c.url);
-        if (!read.ok) {
-          problems.push(`${from}: ${read.reason}`);
-          continue;
-        }
-        details = read.details;
+        if (read.ok) details = read.details;
+        else problems.push(`${from}: ${read.reason}`);
       }
-      const { title, authors, year, type } = details;
-      if (title || authors?.length || year) return { ok: true, suggestion: { from, title, authors, year, type }, problems };
-      problems.push(`no details found in ${from}`);
+      if (!details || !(details.title || details.authors?.length || details.year)) continue;
+
+      const filled = open
+        .map((field) => ({ field, before: detailText(field, source), after: detailText(field, details) }))
+        .filter((f) => f.after && f.after.toLowerCase() !== f.before.toLowerCase());
+      if (!filled.length) return { ...none, from, problems };
+      const patch: Parameters<typeof store.updateSource>[1] = { byHand: false };
+      const previous: PreviousDetails = {};
+      for (const { field } of filled) {
+        if (field === "title") {
+          patch.title = details.title;
+          previous.title = source.title;
+        } else if (field === "authors") {
+          patch.authors = details.authors;
+          previous.authors = source.authors;
+        } else if (field === "year") {
+          patch.year = details.year;
+          previous.year = source.year ?? null;
+        } else {
+          patch.type = details.type;
+          previous.type = source.type;
+        }
+      }
+      await store.updateSource(id, patch);
+      refresh();
+      return { ok: true, from, filled, previous, problems };
     }
-    return { ok: true, suggestion: null, problems };
+    return { ...none, problems };
   } catch (err) {
     console.error(err);
     return { ok: false, error: "Something went wrong reading the source's details." };
   }
+}
+
+/** Undo a fill-in: put back the values from before (still not counted as typed by the user). */
+export async function undoFilledDetails(id: string, previous: PreviousDetails): Promise<ActionResult> {
+  return run(async () => {
+    const patch: Parameters<Awaited<ReturnType<typeof getContentStore>>["updateSource"]>[1] = { byHand: false };
+    if ("title" in previous) patch.title = previous.title;
+    if ("authors" in previous) patch.authors = previous.authors ?? [];
+    if ("year" in previous) patch.year = previous.year ?? null;
+    if ("type" in previous) patch.type = toSourceType(previous.type);
+    await (await getContentStore()).updateSource(id, patch);
+  });
 }

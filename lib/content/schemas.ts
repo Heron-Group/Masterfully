@@ -52,6 +52,19 @@ export const SOURCE_TYPES = [
 ] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
+/** The details a source's PDF or link can fill in. */
+export const SOURCE_DETAIL_FIELDS = ["title", "authors", "year", "type"] as const;
+export type SourceDetailField = (typeof SOURCE_DETAIL_FIELDS)[number];
+
+/**
+ * The details the user set themselves. Sources saved before this was
+ * recorded count everything already filled in (and the type) as theirs.
+ */
+export function setByHand(source: Pick<Source, "setByHand" | "authors" | "year">): SourceDetailField[] {
+  if (source.setByHand) return source.setByHand;
+  return SOURCE_DETAIL_FIELDS.filter((f) => (f === "authors" ? source.authors.length > 0 : f === "year" ? source.year !== undefined : true));
+}
+
 export type Source = {
   id: string;
   path: string;
@@ -70,6 +83,11 @@ export type Source = {
   updated: string;
   notes: string;
   aiSummary: AiSummary | null;
+  /**
+   * Details the user set themselves, which reading a PDF or link never
+   * changes. Undefined for sources saved before this was recorded.
+   */
+  setByHand?: SourceDetailField[];
   body: string;
   problem?: string;
   extra: Record<string, unknown>;
@@ -187,6 +205,7 @@ const SOURCE_KEYS = [
   "pdfs",
   "added",
   "updated",
+  "set_by_hand",
 ] as const;
 
 /** Lists without blanks or repeats, in order. */
@@ -228,6 +247,9 @@ export function parseSource(
     updated: isoDate(data.updated, added),
     notes: getSection(body, "Notes", SOURCE_SECTIONS, { preambleFallback: true }),
     aiSummary: getAiSummary(body, SOURCE_SECTIONS),
+    setByHand: Array.isArray(data.set_by_hand)
+      ? SOURCE_DETAIL_FIELDS.filter((f) => strList(data.set_by_hand).includes(f))
+      : undefined,
     body,
     problem: error,
     extra: extraFields(data, SOURCE_KEYS),
@@ -246,10 +268,11 @@ export function serializeSource(source: Source): string {
       pdfs: source.pdfs.length ? source.pdfs : undefined,
       added: source.added,
       updated: source.updated,
+      set_by_hand: source.setByHand,
       ...source.extra,
     },
     source.body,
-    { flow: ["authors"] },
+    { flow: ["authors", "set_by_hand"] },
   );
 }
 

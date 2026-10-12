@@ -28,9 +28,12 @@ import {
   serializeNote,
   serializeSettings,
   serializeSource,
+  setByHand,
+  SOURCE_DETAIL_FIELDS,
   type Settings,
   type Source,
   withPrimary,
+  type SourceDetailField,
   type SourceType,
 } from "./schemas";
 import {
@@ -72,9 +75,15 @@ export type NewSource = {
   type?: SourceType;
   url?: string;
   notes?: string;
+  /** Details the user typed (the title always counts). */
+  setByHand?: SourceDetailField[];
 };
 
-export type SourcePatch = Partial<Pick<Source, "title" | "authors" | "type" | "url">> & { year?: number | null };
+export type SourcePatch = Partial<Pick<Source, "title" | "authors" | "type" | "url">> & {
+  year?: number | null;
+  /** The user typed these (the default): reading a PDF or link won't change them later. */
+  byHand?: boolean;
+};
 
 /**
  * The only code that touches the content folder. Files on disk are the
@@ -576,6 +585,7 @@ export class ContentStore {
           updated: now,
           notes,
           aiSummary: null,
+          setByHand: SOURCE_DETAIL_FIELDS.filter((f) => f === "title" || (input.setByHand ?? []).includes(f)),
           body: replaceSection("", "Notes", notes, SOURCE_SECTIONS, { position: "start" }),
           extra: {},
         };
@@ -610,6 +620,9 @@ export class ContentStore {
         type: patch.type ?? source.type,
         updated: this.stamp(),
       };
+      // Record what the user typed; filling in from a PDF or link keeps the record as it was.
+      const touched = patch.byHand === false ? [] : SOURCE_DETAIL_FIELDS.filter((f) => f in patch);
+      next.setByHand = SOURCE_DETAIL_FIELDS.filter((f) => touched.includes(f) || setByHand(source).includes(f));
       if ("url" in patch) {
         const url = patch.url?.trim();
         const rest = source.links.slice(1).filter((l) => l !== url);

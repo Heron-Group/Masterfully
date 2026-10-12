@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContentStore, type StoreOptions } from "@/lib/content/store";
+import { setByHand } from "@/lib/content/schemas";
 
 let root: string;
 let dir: string;
@@ -208,6 +209,31 @@ describe("index", () => {
 
     await fs.rm(file);
     expect(await store.getSource(s.id)).toBeNull();
+  });
+});
+
+describe("details set by hand", () => {
+  it("records what the user typed; filling in from a PDF or link doesn't count", async () => {
+    const store = await makeStore();
+    const s = await store.createSource({ title: "Typed", authors: ["Doe, Jane"], setByHand: ["authors"] });
+    expect(s.setByHand).toEqual(["title", "authors"]);
+    const filled = await store.updateSource(s.id, { year: 2020, type: "book", byHand: false });
+    expect(filled.setByHand).toEqual(["title", "authors"]);
+    const typed = await store.updateSource(s.id, { year: 2021 });
+    expect(typed.setByHand).toEqual(["title", "authors", "year"]);
+    expect(await fs.readFile(path.join(dir, s.path), "utf8")).toContain("set_by_hand: [ title, authors, year ]");
+    expect((await (await makeStore()).getSource(s.id))?.setByHand).toEqual(["title", "authors", "year"]);
+  });
+
+  it("counts everything already filled in as the user's for older sources", async () => {
+    const store = await makeStore();
+    await fs.mkdir(path.join(dir, "sources"), { recursive: true });
+    await fs.writeFile(path.join(dir, "sources", "old.md"), "---\nid: old\ntitle: Old\nauthors: [ \"Doe, Jane\" ]\ntype: article\n---\n## Notes\n");
+    const old = (await store.getSource("old"))!;
+    expect(old.setByHand).toBeUndefined();
+    expect(setByHand(old)).toEqual(["title", "authors", "type"]); // no year yet, so that can be filled in
+    // Filling in keeps that record, so the filled year isn't later mistaken for the user's.
+    expect((await store.updateSource("old", { year: 1999, byHand: false })).setByHand).toEqual(["title", "authors", "type"]);
   });
 });
 

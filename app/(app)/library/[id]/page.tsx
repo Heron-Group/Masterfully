@@ -33,7 +33,7 @@ async function SourceLoader({
 }) {
   await requireSession();
   const { id } = await params;
-  const read = (await searchParams).read;
+  const { read, fill } = await searchParams;
   const store = await getContentStore();
   const [source, groups, referencedBy, sources] = await Promise.all([store.getSource(id), store.listGroups(), store.referencesTo(id), store.listSources()]);
   if (!source) notFound();
@@ -45,6 +45,7 @@ async function SourceLoader({
       referencedBy={referencedBy}
       sourceTitles={Object.fromEntries(sources.map((s) => [s.id, s.title]))}
       initialRead={typeof read === "string" && /^(pdf|link)(-\d+)?$/.test(read) ? read : undefined}
+      fillOnOpen={fill === "1" && source.pdfs.length + source.links.length > 0}
     />
   );
 }

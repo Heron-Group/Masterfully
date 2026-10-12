@@ -49,6 +49,10 @@ export function NewSourceView({
   const [authors, setAuthors] = useState("");
   const [year, setYear] = useState("");
   const [type, setType] = useState<SourceType>("article");
+  // The type starts as a default; it counts as the user's only once chosen.
+  const [typeChosen, setTypeChosen] = useState(false);
+  /** Created with a PDF or link: the source page fills in the rest of its details. */
+  const fillAfter = useRef(false);
   const [url, setUrl] = useState("");
   const [pdf, setPdf] = useState<File | null>(null);
   const [inGroups, setInGroups] = useState<string[]>(
@@ -71,7 +75,7 @@ export function NewSourceView({
       !!active &&
       !!article.current?.contains(active) &&
       active.matches("input, textarea, select, [contenteditable=true]");
-    if (!editing) router.replace(`/library/${createdId}`);
+    if (!editing) router.replace(`/library/${createdId}${fillAfter.current ? "?fill=1" : ""}`);
   }, [createdId, router]);
 
   useEffect(() => {
@@ -118,6 +122,9 @@ export function NewSourceView({
     );
     form.set("year", year);
     form.set("type", type);
+    // What the user typed is kept; the PDF or link can fill in the rest.
+    form.set("set_by_hand", [authors.trim() && "authors", year.trim() && "year", typeChosen && "type"].filter(Boolean).join(","));
+    fillAfter.current = !!pdf || !!url.trim();
     form.set("url", url);
     form.set("notes", notes.current);
     for (const g of inGroups) form.append("groups", g);
@@ -188,7 +195,12 @@ export function NewSourceView({
           <InlineSelectText<SourceType>
             value={type}
             options={SOURCE_TYPE_OPTIONS}
-            onSave={(v) => setProp({ type: v }, () => setType(v))}
+            onSave={(v) =>
+              setProp({ type: v }, () => {
+                setType(v);
+                setTypeChosen(true);
+              })
+            }
             ariaLabel="Type"
           />
           {dot}
