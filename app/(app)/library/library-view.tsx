@@ -3,10 +3,12 @@
 import { ArrowLeft, ArrowRight, FileText, Globe } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ArchiveFilter, ArchivedBadge, matchesArchive, type ArchiveView } from "@/components/archive";
 import { isAnnotated, SourceBadges } from "@/components/source-badges";
 import { ui } from "@/components/ui";
 import { formatAuthors, SOURCE_TYPE_OPTIONS, type GroupRefDto, type SourceDto } from "@/lib/dto";
 import { EmptyState } from "@/components/empty-state";
+import type { LinkCounts } from "@/lib/sources/links";
 
 /** Lower-case and strip accents so "muller" finds "Müller". */
 export function fold(text: string): string {
@@ -15,24 +17,25 @@ export function fold(text: string): string {
 
 const plural = (n: number) => `${n} source${n === 1 ? "" : "s"}`;
 
-/** How many other sources a source links to (in its notes) and is linked from. */
-export type LinkCounts = Record<string, { to: number; from: number }>;
 
 export function LibraryView({ sources, groups, linkCounts = {} }: { sources: SourceDto[]; groups: GroupRefDto[]; linkCounts?: LinkCounts }) {
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("");
   const [type, setType] = useState("");
+  const [archive, setArchive] = useState<ArchiveView>("current");
+  const inView = useMemo(() => sources.filter((s) => matchesArchive(archive, s.archived)), [sources, archive]);
+  const hiddenArchived = archive === "current" ? sources.length - inView.length : 0;
 
   const visible = useMemo(() => {
     const words = fold(query).split(/\s+/).filter(Boolean);
-    return sources.filter((s) => {
+    return inView.filter((s) => {
       if (group && !s.groups.some((g) => g.id === group)) return false;
       if (type && s.type !== type) return false;
       if (!words.length) return true;
       const haystack = fold(`${s.title} ${s.authors.join(" ")}`);
       return words.every((w) => haystack.includes(w));
     });
-  }, [sources, query, group, type]);
+  }, [inView, query, group, type]);
 
   if (!sources.length) {
     return (
@@ -42,7 +45,7 @@ export function LibraryView({ sources, groups, linkCounts = {} }: { sources: Sou
 
   return (
     <>
-      <div className="mb-6 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+      <div className="mb-6 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
         <input
           type="search"
           value={query}
@@ -51,7 +54,7 @@ export function LibraryView({ sources, groups, linkCounts = {} }: { sources: Sou
           aria-label="Search sources"
           className={ui.input}
         />
-        <div className="grid grid-cols-2 gap-2 sm:contents">
+        <div className="grid grid-cols-3 gap-2 sm:contents">
           <select value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Filter by group" className={ui.input}>
             <option value="">All groups</option>
             {groups.map((g) => (
@@ -68,11 +71,13 @@ export function LibraryView({ sources, groups, linkCounts = {} }: { sources: Sou
               </option>
             ))}
           </select>
+          <ArchiveFilter value={archive} onChange={setArchive} />
         </div>
       </div>
 
       <p className="mb-2 text-xs text-faint">
-        {visible.length === sources.length ? `${sources.length} sources` : `${visible.length} of ${sources.length} sources`}
+        {visible.length === inView.length ? `${inView.length} ${archive === "archived" ? "archived " : ""}sources` : `${visible.length} of ${inView.length} sources`}
+        {hiddenArchived > 0 && ` · ${hiddenArchived} archived not shown`}
       </p>
       <ul className="divide-y divide-rule border-y border-rule">
         {visible.map((s) => (
@@ -96,6 +101,7 @@ export function SourceRow({ source: s, links }: { source: SourceDto; links?: { t
         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
           {s.authors.length > 0 && <span>{formatAuthors(s.authors)}</span>}
           {s.year && <span className="tabular-nums">{s.year}</span>}
+          {s.archived && <ArchivedBadge />}
           <SourceBadges summarised={!!s.aiSummary} annotated={isAnnotated(s.notes)} />
           {!!links?.from && (
             <span className={`${ui.badge} inline-flex items-center gap-1`} title={`${plural(links.from)} link to this source`}>

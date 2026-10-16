@@ -132,6 +132,11 @@ content/
     attachments/notes/<note id>/<files>
 ```
 
+- **Archiving** a source or reading group adds `archived: <date>` to its
+  frontmatter; archiving a group also archives its sources (marked
+  `archived_with: <group id>`, so unarchiving the group brings back just
+  those). Archived items are hidden from the library, groups and map until
+  "Archived" is chosen; nothing is deleted.
 - **Deleting someone** means deleting their `users/<id>/` folder.
 - **"Download your data"** (Settings) gives a person a zip of their folder,
   without `account.md` and `ai-key.json`.
@@ -339,6 +344,8 @@ view used, and dragged node positions per view).
   or isolated and unlinked sources, and list them in the side panel.
 - Double-click a source to focus on it (1 or 2 steps); Escape returns.
 - Dragged nodes stay pinned and are saved; **Reset layout** clears them.
+- Archived sources and groups are left out (figures included) unless
+  **Show archived** is on.
 - **Export** saves the current view as SVG (shapes and editable text in named
   layers, for Illustrator) or PNG, with the legend and date.
 

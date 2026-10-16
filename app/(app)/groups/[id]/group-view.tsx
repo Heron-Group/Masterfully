@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import { Archive, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { InlineTitle, useInlineSave } from "@/components/inline-fields";
 import { LiveEditor } from "@/components/live-editor/live-editor";
@@ -10,8 +10,10 @@ import { ui } from "@/components/ui";
 import { SaveStatus, useAutosave } from "@/components/use-autosave";
 import type { GroupDto } from "@/lib/dto";
 import { formatShortDate, formatTime } from "@/lib/time";
+import { ArchivedBar } from "@/components/archive";
 import { GroupColourPicker } from "@/components/group-colour-picker";
-import { deleteGroup, renameGroup, saveGroupOverview, setGroupColour, type ActionResult } from "../actions";
+import type { LinkCounts } from "@/lib/sources/links";
+import { deleteGroup, renameGroup, saveGroupOverview, setGroupArchived, setGroupColour, type ActionResult } from "../actions";
 import { GroupSources, type LibraryItem } from "./group-sources";
 import { GroupSummaryPanel } from "./group-summary";
 
@@ -19,7 +21,7 @@ export function changed() {
   window.dispatchEvent(new Event(CONTENT_CHANGED_EVENT));
 }
 
-export function GroupView({ group, library, colour }: { group: GroupDto; library: LibraryItem[]; colour?: string }) {
+export function GroupView({ group, library, linkCounts, colour }: { group: GroupDto; library: LibraryItem[]; linkCounts: LinkCounts; colour?: string }) {
   if (group.problem) {
     return (
       <div className="mt-6 rounded-md bg-warn/10 px-4 py-3 text-sm">
@@ -33,10 +35,23 @@ export function GroupView({ group, library, colour }: { group: GroupDto; library
   }
   return (
     <article className="mt-4 space-y-12">
-      <Header group={group} colour={colour} />
+      <div>
+        {group.archived && (
+          <ArchivedBar
+            archived={group.archived}
+            what="group (and the sources archived with it)"
+            onUnarchive={async () => {
+              const r = await setGroupArchived(group.id, false);
+              if (r.ok) changed();
+              return r;
+            }}
+          />
+        )}
+        <Header group={group} colour={colour} />
+      </div>
       <Overview group={group} />
       <GroupSummaryPanel group={group} />
-      <GroupSources group={group} library={library} />
+      <GroupSources group={group} library={library} linkCounts={linkCounts} />
     </article>
   );
 }
@@ -76,7 +91,8 @@ function Header({ group, colour }: { group: GroupDto; colour?: string }) {
             <GroupColourPicker colour={colour} onPick={(hex) => setGroupColour(group.id, hex)} />
           </>
         )}
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center">
+          {!group.archived && <ArchiveGroupControl group={group} />}
           <DeleteGroupControl group={group} />
         </span>
       </div>
@@ -115,6 +131,60 @@ function Overview({ group }: { group: GroupDto }) {
         className="min-h-16"
       />
     </section>
+  );
+}
+
+/** Archive icon in the details line; asks first, since the group's sources are archived too. */
+function ArchiveGroupControl({ group }: { group: GroupDto }) {
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [pending, start] = useTransition();
+  const count = group.sources.filter((s) => s.source && !s.source.archived).length;
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setConfirming((c) => !c)}
+        aria-label="Archive group…"
+        aria-expanded={confirming}
+        title="Archive group"
+        className="rounded-md p-1.5 text-faint transition-colors hover:bg-accent-soft hover:text-ink"
+      >
+        <Archive size={15} strokeWidth={1.7} aria-hidden="true" />
+      </button>
+      {confirming && (
+        <div role="alertdialog" aria-label="Archive group" className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg bg-surface p-4 text-sm text-ink shadow-lg shadow-black/10 ring-1 ring-rule">
+          <p>
+            Archive <strong>{group.title}</strong>
+            {count ? ` and its ${count} source${count === 1 ? "" : "s"}` : ""}? They&apos;ll be hidden from your library, groups and map until you
+            choose to show archived items. Nothing is deleted, and you can unarchive at any time.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const r = await setGroupArchived(group.id, true);
+                  setResult(r);
+                  if (r.ok) {
+                    changed();
+                    setConfirming(false);
+                  }
+                })
+              }
+              className={ui.btnPrimary}
+            >
+              {pending ? "Archiving…" : "Archive"}
+            </button>
+            <button type="button" onClick={() => setConfirming(false)} className={ui.btnGhost}>
+              Cancel
+            </button>
+          </div>
+          {result && !result.ok && <p role="alert" className="mt-2 text-danger">{result.error}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 

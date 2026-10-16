@@ -898,6 +898,39 @@ export class ContentStore {
     });
   }
 
+  /** Archive or unarchive a source on its own (hidden from the library, groups and map by default). */
+  async setSourceArchived(id: string, archived: boolean): Promise<Source> {
+    return this.write(async (tx) => {
+      const source = this.requireSource(id);
+      if (!!source.archived === archived) return source;
+      const next = { ...source, archived: archived ? this.stamp() : undefined, archivedWith: undefined, updated: this.stamp() };
+      await tx.writeText(source.path, serializeSource(next));
+      return next;
+    });
+  }
+
+  /**
+   * Archive a group and every source in it that isn't archived already
+   * (marked as archived with this group). Unarchiving brings back the group
+   * and just those sources; ones archived separately stay archived.
+   */
+  async setGroupArchived(id: string, archived: boolean): Promise<Group> {
+    return this.write(async (tx) => {
+      const group = this.requireGroup(id);
+      const now = this.stamp();
+      for (const ref of group.sources) {
+        const source = this.sources.get(ref.id);
+        if (!source || source.problem) continue;
+        if (archived && !source.archived) {
+          await tx.writeText(source.path, serializeSource({ ...source, archived: now, archivedWith: id, updated: now }));
+        } else if (!archived && source.archived && source.archivedWith === id) {
+          await tx.writeText(source.path, serializeSource({ ...source, archived: undefined, archivedWith: undefined, updated: now }));
+        }
+      }
+      return this.writeGroup(tx, { ...group, archived: archived ? now : undefined });
+    });
+  }
+
   /** Deleting a group never deletes its sources. */
   async deleteGroup(id: string): Promise<void> {
     await this.write(async (tx) => {

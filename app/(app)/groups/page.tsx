@@ -4,8 +4,8 @@ import { Suspense } from "react";
 import { ui } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { getContentStore } from "@/lib/content";
-import { formatShortDate } from "@/lib/time";
 import { EmptyState } from "@/components/empty-state";
+import { GroupsView } from "./groups-view";
 
 export const metadata: Metadata = { title: "Reading groups" };
 
@@ -34,22 +34,15 @@ async function GroupList() {
     );
   }
   return (
-    <ul className="divide-y divide-rule border-y border-rule">
-      {groups.map((g) => (
-        <li key={g.id}>
-          <Link href={`/groups/${g.id}`} className="group flex items-baseline gap-4 py-4">
-            <span className="min-w-0 flex-1 font-serif text-lg leading-snug group-hover:underline group-hover:decoration-rule group-hover:underline-offset-4">
-              {g.title}
-            </span>
-            <span className="shrink-0 text-sm tabular-nums text-muted">
-              {g.sources.length} source{g.sources.length === 1 ? "" : "s"}
-            </span>
-            <span className="hidden shrink-0 whitespace-nowrap text-right text-xs text-faint sm:block">
-              Updated {formatShortDate(g.updated)}
-            </span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <GroupsView
+      groups={groups.map((g) => ({
+        id: g.id,
+        title: g.title,
+        overview: g.overview,
+        sourceCount: g.sources.length,
+        updated: g.updated,
+        archived: g.archived,
+      }))}
+    />
   );
 }

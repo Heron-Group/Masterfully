@@ -99,7 +99,7 @@ test("drag and drop reorders sources and saves the order", async ({ page }) => {
   await expect(page.getByRole("button", { name: /^Reorder / }).first()).toHaveAttribute("aria-label", /Making/);
 });
 
-test("group note, expandable source notes and overview are saved separately", async ({ page }) => {
+test("group note and overview are saved separately; sources show as in the library", async ({ page }) => {
   await openGroup(page);
   const note = page.getByLabel(/Group note for Co-creation/);
   await note.fill("Defines the vocabulary");
@@ -107,8 +107,10 @@ test("group note, expandable source notes and overview are saved separately", as
   await expect(page.getByText("Saved", { exact: true }).first()).toBeVisible();
   expect(groupFile()).toContain('note: Defines the vocabulary');
 
-  await page.getByRole("button", { name: "Show my notes" }).nth(1).click();
-  await expect(page.getByText("Distinguishes co-creation from co-design.")).toBeVisible();
+  // Each source is a library row: its link opens the source, with its labels.
+  const row = page.getByRole("listitem").filter({ has: page.getByLabel(/Group note for Co-creation/) });
+  await expect(row.getByRole("link", { name: /^Co-creation and the new landscapes/ })).toHaveAttribute("href", /\/library\//);
+  await expect(row.getByText("Annotated")).toBeVisible();
 
   await page.getByRole("textbox", { name: "My overview" }).fill("Methods texts for chapter 3.");
   await expect(page.getByText("Saved", { exact: true }).first()).toBeVisible({ timeout: 10_000 });

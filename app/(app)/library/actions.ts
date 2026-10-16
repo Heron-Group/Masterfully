@@ -176,3 +176,8 @@ export async function undoFilledDetails(id: string, previous: PreviousDetails): 
     await (await getContentStore()).updateSource(id, patch);
   });
 }
+
+/** Archive a source (hidden from the library, groups and map until shown) or bring it back. */
+export async function setSourceArchived(id: string, archived: boolean): Promise<ActionResult> {
+  return run(() => getContentStore().then((s) => s.setSourceArchived(id, archived)));
+}

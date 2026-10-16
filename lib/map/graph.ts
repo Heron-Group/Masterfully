@@ -3,8 +3,8 @@
 // written in source notes and group membership as edges, and the crossover
 // figures derived from them. Pure functions, so they can be unit-tested.
 
-export type MapSourceInput = { id: string; title: string; authors: string[]; year?: number; notes: string };
-export type MapGroupInput = { id: string; title: string; overview: string; sources: Array<{ id: string; note: string }> };
+export type MapSourceInput = { id: string; title: string; authors: string[]; year?: number; notes: string; archived?: boolean };
+export type MapGroupInput = { id: string; title: string; overview: string; sources: Array<{ id: string; note: string }>; archived?: boolean };
 
 /** Where links come from. Only source notes for now; Notes pages could be added as another origin. */
 export type LinkOrigin = "source-notes";
@@ -25,9 +25,11 @@ export type MapSource = {
   isolated: boolean;
   /** In a group, but no links to or from other sources. */
   unlinked: boolean;
+  /** Archived (only on the map when archived items are shown). */
+  archived?: boolean;
 };
 
-export type MapGroup = { id: string; title: string; colour: string; overviewPreview: string; sources: string[] };
+export type MapGroup = { id: string; title: string; colour: string; overviewPreview: string; sources: string[]; archived?: boolean };
 
 /** One line per ordered pair: `from`'s notes link to `to`, `count` times, with these linked words. */
 export type MapLink = { from: string; to: string; count: number; labels: string[]; origin: LinkOrigin };
@@ -141,7 +143,14 @@ export function buildGraph(input: {
       memberships.push({ source: ref.id, group: g.id, note: ref.note });
       groupsOf.set(ref.id, [...(groupsOf.get(ref.id) ?? []), g.id]);
     }
-    return { id: g.id, title: g.title, colour: input.colours[g.id] ?? "", overviewPreview: preview(g.overview), sources: members };
+    return {
+      id: g.id,
+      title: g.title,
+      colour: input.colours[g.id] ?? "",
+      overviewPreview: preview(g.overview),
+      sources: members,
+      ...(g.archived ? { archived: true } : {}),
+    };
   });
 
   // Links: one per ordered pair, with every linked phrase.
@@ -188,6 +197,7 @@ export function buildGraph(input: {
       hub: d >= hubThreshold,
       isolated: d === 0 && g.length === 0,
       unlinked: d === 0 && g.length > 0,
+      ...(s.archived ? { archived: true } : {}),
     };
   });
 

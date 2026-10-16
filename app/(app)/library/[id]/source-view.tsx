@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, BookOpen, Download, FilePlus2, FileText, Globe, Link2, Pencil, StickyNote, Trash2, Wand2, X } from "lucide-react";
+import { Archive, ArrowLeft, ArrowRight, BookOpen, Download, FilePlus2, FileText, Globe, Link2, Pencil, StickyNote, Trash2, Wand2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { InlineAutoText, InlineSelectText, InlineTitle, PropertyRow, useInlineSave } from "@/components/inline-fields";
 import { GroupTags } from "@/components/group-tags";
+import { ArchivedBar } from "@/components/archive";
 import { SourceBadges } from "@/components/source-badges";
 import { LiveEditor } from "@/components/live-editor/live-editor";
 import { ReaderPanel, type ReaderTab } from "@/components/reader-panel";
@@ -20,6 +21,7 @@ import {
   deleteSource,
   removeSourcePdf,
   saveSourceNotes,
+  setSourceArchived,
   setSourceInGroup,
   setSourceLink,
   fillSourceDetails,
@@ -149,6 +151,17 @@ export function SourceView({
     <>
       <article className="mt-4 space-y-10">
         <div>
+          {source.archived && (
+            <ArchivedBar
+              archived={source.archived}
+              what="source"
+              onUnarchive={async () => {
+                const r = await setSourceArchived(source.id, false);
+                if (r.ok) changed();
+                return r;
+              }}
+            />
+          )}
           <Details source={source} />
           {filling && <FilledNote sourceId={source.id} state={filling} onClose={() => setFilling(null)} />}
         </div>
@@ -199,7 +212,8 @@ function Details({ source }: { source: SourceDto }) {
         <div className="min-w-0 flex-1">
           <InlineTitle value={source.title} onSave={(title) => void update({ title })} ariaLabel="Title" />
         </div>
-        <div className="pt-2.5">
+        <div className="flex items-center pt-2.5">
+          {!source.archived && <ArchiveControl source={source} />}
           <DeleteControl source={source} />
         </div>
       </div>
@@ -429,6 +443,37 @@ function SourceGroupTags({ source, allGroups }: { source: SourceDto; allGroups: 
         <p role="alert" className="mt-1 text-xs text-danger">
           {error}
         </p>
+      )}
+    </>
+  );
+}
+
+/** Archive icon beside delete: hides the source from the library, groups and map (Unarchive brings it back). */
+function ArchiveControl({ source }: { source: SourceDto }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const r = await setSourceArchived(source.id, true);
+            if (r.ok) changed();
+            else setError(r.error);
+          })
+        }
+        aria-label="Archive source"
+        title="Archive: hide from your library, groups and map (nothing is deleted)"
+        className="rounded-md p-1.5 text-faint transition-colors hover:bg-accent-soft hover:text-ink"
+      >
+        <Archive size={15} strokeWidth={1.7} aria-hidden="true" />
+      </button>
+      {error && (
+        <span role="alert" className="text-xs text-danger">
+          {error}
+        </span>
       )}
     </>
   );

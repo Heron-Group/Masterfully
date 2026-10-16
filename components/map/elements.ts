@@ -47,7 +47,7 @@ export function networkElements(graph: MapGraph): ElementDefinition[] {
     els.push({
       group: "nodes",
       data: { id: groupNodeId(g.id), kind: "group", ref: g.id, label: g.title, colour: g.colour, size: 44 + 6 * Math.sqrt(g.sources.length) },
-      classes: "group",
+      classes: g.archived ? "group archived" : "group",
     });
   }
   for (const s of graph.sources) {
@@ -73,6 +73,7 @@ export function networkElements(graph: MapGraph): ElementDefinition[] {
     }
     if (!s.groups.length) classes.push("ungrouped");
     if (s.hub) classes.push("hub");
+    if (s.archived) classes.push("archived");
     if (s.isolated) classes.push("isolated");
     if (s.unlinked) classes.push("unlinked");
     els.push({ group: "nodes", data, classes: classes.join(" ") });
@@ -120,7 +121,7 @@ export function groupElements(graph: MapGraph): ElementDefinition[] {
           colour: g.colour,
           size: 30 + 12 * Math.sqrt(g.sources.length),
         },
-        classes: g.sources.some((s) => unlinked.has(s)) ? "group overview has-gaps" : "group overview",
+        classes: ["group overview", g.sources.some((s) => unlinked.has(s)) ? "has-gaps" : "", g.archived ? "archived" : ""].join(" ").trim(),
       }),
     ),
     ...crossoverEdges(graph, 2).map((e) => ({ ...e, classes: "crossover labelled" })),
@@ -240,6 +241,8 @@ export function mapStyle(t: ThemeTokens): StylesheetJson {
       },
     },
     // Crossover and Gaps modes: what's highlighted keeps its colour, the rest fades.
+    // Archived items, when shown: faint, so the current map still stands out.
+    { selector: "node.archived", style: { opacity: 0.45, "border-style": "dotted", "border-width": 2, "border-color": t.muted } },
     { selector: ".dim", style: { opacity: 0.1, "text-opacity": 0.15 } },
     { selector: "node.xhl", style: { "border-width": 4, "border-color": t.accent } },
     {

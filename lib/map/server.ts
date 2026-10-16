@@ -18,13 +18,18 @@ export async function groupColours(userId: string, groups: Array<{ id: string; c
 
 export type MapResponse = MapGraph & { lastView: MapView; pins: NonNullable<MapLayout["pins"]> };
 
-/** The signed-in user's map, rebuilt from their sources and groups. */
-export async function loadMap(userId: string, store: ContentStore): Promise<MapResponse> {
-  const [sources, groups] = await Promise.all([store.listSources(), store.listGroups()]);
-  const colours = await groupColours(userId, groups);
+/**
+ * The signed-in user's map, rebuilt from their sources and groups. Archived
+ * ones are left out (so every figure is about what's shown) unless asked for.
+ */
+export async function loadMap(userId: string, store: ContentStore, opts: { includeArchived?: boolean } = {}): Promise<MapResponse> {
+  const [allSources, allGroups] = await Promise.all([store.listSources(), store.listGroups()]);
+  const colours = await groupColours(userId, allGroups);
+  const sources = opts.includeArchived ? allSources : allSources.filter((s) => !s.archived);
+  const groups = opts.includeArchived ? allGroups : allGroups.filter((g) => !g.archived);
   const graph = buildGraph({
-    sources: sources.map((s) => ({ id: s.id, title: s.title, authors: s.authors, year: s.year, notes: s.notes })),
-    groups: groups.map((g) => ({ id: g.id, title: g.title, overview: g.overview, sources: g.sources })),
+    sources: sources.map((s) => ({ id: s.id, title: s.title, authors: s.authors, year: s.year, notes: s.notes, archived: !!s.archived })),
+    groups: groups.map((g) => ({ id: g.id, title: g.title, overview: g.overview, sources: g.sources, archived: !!g.archived })),
     colours,
   });
   const layout = await readMapLayout(userId);

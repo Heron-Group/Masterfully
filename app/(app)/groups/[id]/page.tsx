@@ -7,6 +7,7 @@ import { groupToDto } from "@/lib/api";
 import { requireSession } from "@/lib/auth";
 import { getContentStore } from "@/lib/content";
 import { groupColours } from "@/lib/map/server";
+import { countLinks } from "@/lib/sources/links";
 import { GroupView } from "./group-view";
 
 export async function generateMetadata(props: PageProps<"/groups/[id]">): Promise<Metadata> {
@@ -32,11 +33,15 @@ async function GroupLoader({ params }: { params: PageProps<"/groups/[id]">["para
   const group = await store.getGroup(id);
   if (!group) notFound();
   const colours = await groupColours(account.id, await store.listGroups());
-  const library = (await store.listSources()).map((s) => ({
-    id: s.id,
-    title: s.title,
-    authors: s.authors,
-    year: s.year,
-  }));
-  return <GroupView key={group.id} group={await groupToDto(group, store)} library={library} colour={colours[group.id]} />;
+  const sources = await store.listSources();
+  const library = sources.map((s) => ({ id: s.id, title: s.title, authors: s.authors, year: s.year, archived: !!s.archived }));
+  return (
+    <GroupView
+      key={group.id}
+      group={await groupToDto(group, store)}
+      library={library}
+      linkCounts={countLinks(sources)}
+      colour={colours[group.id]}
+    />
+  );
 }

@@ -136,6 +136,7 @@ function SourceDetails({ id, graph, lookup, onPick }: { id: string; graph: MapGr
         Source
         {s.hub && <span className="rounded bg-ink px-1 py-px text-[10px] text-paper">Hub</span>}
         {s.groups.length >= 2 && <span className="rounded bg-accent-soft px-1 py-px text-[10px] text-ink">Shared</span>}
+        {s.archived && <span className="rounded bg-accent-soft px-1 py-px text-[10px] text-ink">Archived</span>}
       </Eyebrow>
       <h2 className="mt-1 font-serif text-xl leading-snug">{s.title}</h2>
       {(s.authors.length > 0 || s.year) && <p className="mt-1 text-sm text-muted">{[formatAuthors(s.authors), s.year].filter(Boolean).join(" · ")}</p>}
@@ -182,6 +183,7 @@ function GroupDetails({ id, graph, lookup, onPick, onSelect }: { id: string; gra
       <Eyebrow>
         <Dot colour={g.colour} />
         Reading group
+        {g.archived && <span className="rounded bg-accent-soft px-1 py-px text-[10px] text-ink">Archived</span>}
       </Eyebrow>
       <h2 className="mt-1 font-serif text-xl leading-snug">{g.title}</h2>
       <p className="mt-1 text-sm text-muted">{plural(g.sources.length, "source")}</p>

@@ -20,17 +20,17 @@ import { CSS } from "@dnd-kit/utilities";
 import { FilePlus2, Library } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState, useTransition } from "react";
-import { Markdown } from "@/components/markdown";
 import { AutoTextarea } from "@/components/auto-textarea";
 import { ui } from "@/components/ui";
 import { formatAuthors, type GroupDto, type GroupSourceDto } from "@/lib/dto";
+import type { LinkCounts } from "@/lib/sources/links";
 import { addSourcesToGroup, removeSourceFromGroup, reorderGroupSources, saveGroupSourceNote } from "../actions";
-import { fold } from "../../library/library-view";
+import { fold, SourceRow } from "../../library/library-view";
 import { changed } from "./group-view";
 
-export type LibraryItem = { id: string; title: string; authors: string[]; year?: number };
+export type LibraryItem = { id: string; title: string; authors: string[]; year?: number; archived?: boolean };
 
-export function GroupSources({ group, library }: { group: GroupDto; library: LibraryItem[] }) {
+export function GroupSources({ group, library, linkCounts }: { group: GroupDto; library: LibraryItem[]; linkCounts: LinkCounts }) {
   // Local copy for instant reordering; reset whenever the server sends new data.
   const [items, setItems] = useState(group.sources);
   const [prev, setPrev] = useState(group.sources);
@@ -84,7 +84,7 @@ export function GroupSources({ group, library }: { group: GroupDto; library: Lib
       {picking && (
         <SourcePicker
           groupId={group.id}
-          library={library.filter((s) => !items.some((i) => i.id === s.id))}
+          library={library.filter((s) => !s.archived && !items.some((i) => i.id === s.id))}
           onClose={() => setPicking(false)}
         />
       )}
@@ -100,7 +100,7 @@ export function GroupSources({ group, library }: { group: GroupDto; library: Lib
           <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             <ol className="divide-y divide-rule border-y border-rule">
               {items.map((item, index) => (
-                <SortableSource key={item.id} groupId={group.id} item={item} index={index} />
+                <SortableSource key={item.id} groupId={group.id} item={item} index={index} links={linkCounts[item.id]} />
               ))}
             </ol>
           </SortableContext>
@@ -112,9 +112,9 @@ export function GroupSources({ group, library }: { group: GroupDto; library: Lib
   );
 }
 
-function SortableSource({ groupId, item, index }: { groupId: string; item: GroupSourceDto; index: number }) {
+/** One source, shown as in the library, with a drag handle, its group note and remove. */
+function SortableSource({ groupId, item, index, links }: { groupId: string; item: GroupSourceDto; index: number; links?: LinkCounts[string] }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
-  const [expanded, setExpanded] = useState(false);
   const [note, setNote] = useState(item.note);
   const [savedNote, setSavedNote] = useState(item.note);
   const [noteState, setNoteState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -140,91 +140,72 @@ function SortableSource({ groupId, item, index }: { groupId: string; item: Group
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`relative flex gap-2 bg-paper py-4 ${isDragging ? "z-10 shadow-lg shadow-black/10" : ""}`}
+      className={`relative bg-paper ${isDragging ? "z-10 shadow-lg shadow-black/10" : ""}`}
     >
-      <button
-        type="button"
-        ref={setActivatorNodeRef}
-        {...attributes}
-        {...listeners}
-        aria-label={`Reorder ${s?.title ?? item.id} (position ${index + 1})`}
-        className="mt-0.5 flex h-7 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-faint hover:text-ink active:cursor-grabbing"
-      >
-        <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true">
-          {[3, 8, 13].map((y) => (
-            <g key={y} fill="currentColor">
-              <circle cx="2.5" cy={y} r="1.3" />
-              <circle cx="7.5" cy={y} r="1.3" />
-            </g>
-          ))}
-        </svg>
-      </button>
-
-      <div className="min-w-0 flex-1">
-        {s ? (
-          <>
-            <Link href={`/library/${s.id}`} className="font-serif text-[17px] leading-snug hover:underline hover:decoration-rule hover:underline-offset-4">
-              {s.title}
-            </Link>
-            <p className="mt-0.5 text-sm text-muted">
-              {[formatAuthors(s.authors), s.year].filter(Boolean).join(" · ")}
+      <div className="flex items-start gap-1">
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          aria-label={`Reorder ${s?.title ?? item.id} (position ${index + 1})`}
+          className="mt-4 flex h-7 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-faint hover:text-ink active:cursor-grabbing"
+        >
+          <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true">
+            {[3, 8, 13].map((y) => (
+              <g key={y} fill="currentColor">
+                <circle cx="2.5" cy={y} r="1.3" />
+                <circle cx="7.5" cy={y} r="1.3" />
+              </g>
+            ))}
+          </svg>
+        </button>
+        <div className="min-w-0 flex-1">
+          {s ? (
+            <SourceRow source={s} links={links} />
+          ) : (
+            <p className="py-3.5 text-sm text-warn">
+              Missing source <code>{item.id}</code> — its file was removed outside the app.
             </p>
-          </>
-        ) : (
-          <p className="text-sm text-warn">
-            Missing source <code>{item.id}</code> — its file was removed outside the app.
+          )}
+        </div>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const r = await removeSourceFromGroup(groupId, item.id);
+              if (r.ok) changed();
+              else setError(r.error);
+            })
+          }
+          aria-label={`Remove ${s?.title ?? item.id} from this group`}
+          title="Remove from group (the source stays in your library)"
+          className="mt-4 h-7 shrink-0 rounded px-2 text-muted hover:text-danger"
+        >
+          ×
+        </button>
+      </div>
+      <div className="-mt-2 pb-3 pl-7 pr-9">
+        <AutoTextarea
+          value={note}
+          onChange={(v) => {
+            setNote(v);
+            setNoteState("idle");
+          }}
+          onBlur={() => void saveNote()}
+          onSubmit={() => void saveNote()}
+          placeholder="Why this source matters to this group…"
+          aria-label={`Group note for ${s?.title ?? item.id}`}
+          className="-mx-2 block w-full resize-none rounded border border-transparent bg-transparent px-2 py-1 text-sm italic text-muted placeholder:text-faint hover:border-rule focus:border-accent focus:bg-surface focus:not-italic focus:text-ink focus:outline-none"
+        />
+        {noteState !== "idle" && <span className="text-xs text-faint">{noteState === "saving" ? "Saving…" : noteState === "saved" ? "Saved" : ""}</span>}
+        {error && (
+          <p role="alert" className="mt-1 text-sm text-danger">
+            {error}
           </p>
         )}
-
-        <div className="mt-2">
-          <AutoTextarea
-            value={note}
-            onChange={(v) => {
-              setNote(v);
-              setNoteState("idle");
-            }}
-            onBlur={() => void saveNote()}
-            onSubmit={() => void saveNote()}
-            placeholder="Why this source matters to this group…"
-            aria-label={`Group note for ${s?.title ?? item.id}`}
-            className="block w-full resize-none rounded border border-transparent bg-transparent px-2 py-1 -mx-2 text-[15px] italic text-ink placeholder:text-faint hover:border-rule focus:border-accent focus:bg-surface focus:not-italic focus:outline-none"
-          />
-          <span className="text-xs text-faint">
-            {noteState === "saving" ? "Saving…" : noteState === "saved" ? "Saved" : ""}
-          </span>
-        </div>
-
-        {s && (
-          <div className="mt-1">
-            <button type="button" onClick={() => setExpanded((e) => !e)} aria-expanded={expanded} className="text-xs text-muted hover:text-ink">
-              {expanded ? "Hide my notes" : "Show my notes"}
-            </button>
-            {expanded && (
-              <div className="mt-2 border-l-2 border-rule pl-4">
-                {s.notes ? <Markdown className="text-[16px]">{s.notes}</Markdown> : <p className="text-sm text-faint">No notes on this source yet.</p>}
-              </div>
-            )}
-          </div>
-        )}
-        {error && <p role="alert" className="mt-1 text-sm text-danger">{error}</p>}
       </div>
-
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() =>
-          start(async () => {
-            const r = await removeSourceFromGroup(groupId, item.id);
-            if (r.ok) changed();
-            else setError(r.error);
-          })
-        }
-        aria-label={`Remove ${s?.title ?? item.id} from this group`}
-        title="Remove from group (the source stays in your library)"
-        className="h-7 shrink-0 rounded px-2 text-muted hover:text-danger"
-      >
-        ×
-      </button>
     </li>
   );
 }

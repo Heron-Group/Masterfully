@@ -82,3 +82,8 @@ export async function setGroupColour(id: string, hex: string): Promise<ActionRes
     return { ok: false, error: "Something went wrong on the server. Nothing was saved." };
   }
 }
+
+/** Archive a group with all its sources, or bring them back. */
+export async function setGroupArchived(id: string, archived: boolean): Promise<ActionResult> {
+  return run(() => getContentStore().then((s) => s.setGroupArchived(id, archived)));
+}

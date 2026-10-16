@@ -102,19 +102,24 @@ export function MapView() {
   const pending = useRef<((cy: Core) => void) | null>(null);
   const wasFocused = useRef(false);
 
+  const [showArchived, setShowArchived] = useState(false);
+  const firstLoad = useRef(true);
+
+  // Archived sources and groups are left out unless asked for (a fresh graph, so the figures match).
   useEffect(() => {
-    fetch("/api/map", { cache: "no-store" })
+    fetch(`/api/map${showArchived ? "?archived=1" : ""}`, { cache: "no-store" })
       .then(async (r) => {
         if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't load the map.");
         return r.json() as Promise<MapResponse>;
       })
       .then((data) => {
         pins.current = { network: data.pins.network ?? {}, groups: data.pins.groups ?? {} };
-        setView(data.lastView);
+        if (firstLoad.current) setView(data.lastView);
+        firstLoad.current = false;
         setGraph(data);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Couldn't load the map."));
-  }, []);
+  }, [showArchived]);
 
   const lookup = useMemo<Lookup | null>(() => {
     if (!graph) return null;
@@ -470,7 +475,18 @@ export function MapView() {
       </p>
     );
   }
-  if (graph && !graph.sources.length) return <EmptyState label="Your map is empty. Add sources to see how they connect." />;
+  if (graph && !graph.sources.length) {
+    return (
+      <div className="flex flex-col items-center">
+        <EmptyState label="Your map is empty. Add sources to see how they connect." />
+        {!showArchived && (
+          <button type="button" onClick={() => setShowArchived(true)} className={toolButton}>
+            Show archived sources
+          </button>
+        )}
+      </div>
+    );
+  }
 
   const focusTitle = focus && live ? (live.$id(focus.id).data("title") ?? live.$id(focus.id).data("label")) : null;
 
@@ -500,6 +516,9 @@ export function MapView() {
           </Toggle>
           <Toggle pressed={mode === "gaps"} onClick={() => setMode((m) => (m === "gaps" ? null : "gaps"))}>
             Gaps
+          </Toggle>
+          <Toggle pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
+            Show archived
           </Toggle>
           <span className="ml-auto flex items-center gap-1">
             {pinCount > 0 && (

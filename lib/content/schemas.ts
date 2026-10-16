@@ -88,6 +88,10 @@ export type Source = {
    * changes. Undefined for sources saved before this was recorded.
    */
   setByHand?: SourceDetailField[];
+  /** When it was archived (hidden from the library, groups and map by default). */
+  archived?: string;
+  /** The group whose archiving archived it; unarchiving that group brings it back. */
+  archivedWith?: string;
   body: string;
   problem?: string;
   extra: Record<string, unknown>;
@@ -107,6 +111,8 @@ export type Group = {
   sourcesChanged?: string;
   overview: string;
   aiSummary: AiSummary | null;
+  /** When it was archived, with its sources (hidden by default). */
+  archived?: string;
   body: string;
   problem?: string;
   extra: Record<string, unknown>;
@@ -206,6 +212,8 @@ const SOURCE_KEYS = [
   "added",
   "updated",
   "set_by_hand",
+  "archived",
+  "archived_with",
 ] as const;
 
 /** Lists without blanks or repeats, in order. */
@@ -250,6 +258,8 @@ export function parseSource(
     setByHand: Array.isArray(data.set_by_hand)
       ? SOURCE_DETAIL_FIELDS.filter((f) => strList(data.set_by_hand).includes(f))
       : undefined,
+    archived: optStr(data.archived) ? isoDate(data.archived, added) : undefined,
+    archivedWith: optStr(data.archived) ? optStr(data.archived_with) : undefined,
     body,
     problem: error,
     extra: extraFields(data, SOURCE_KEYS),
@@ -269,6 +279,8 @@ export function serializeSource(source: Source): string {
       added: source.added,
       updated: source.updated,
       set_by_hand: source.setByHand,
+      archived: source.archived,
+      archived_with: source.archived ? source.archivedWith : undefined,
       ...source.extra,
     },
     source.body,
@@ -285,6 +297,7 @@ const GROUP_KEYS = [
   "updated",
   "sources",
   "sources_changed",
+  "archived",
 ] as const;
 
 function readGroupSources(value: unknown): GroupSourceRef[] {
@@ -321,6 +334,7 @@ export function parseGroup(
     aiSummary: getAiSummary(body, GROUP_SECTIONS),
     body,
     problem: error,
+    archived: optStr(data.archived) ? isoDate(data.archived, created) : undefined,
     extra: extraFields(data, GROUP_KEYS),
   };
 }
@@ -334,6 +348,7 @@ export function serializeGroup(group: Group): string {
       updated: group.updated,
       sources: group.sources.map((s) => (s.note ? { id: s.id, note: s.note } : { id: s.id })),
       sources_changed: group.sourcesChanged,
+      archived: group.archived,
       ...group.extra,
     },
     group.body,

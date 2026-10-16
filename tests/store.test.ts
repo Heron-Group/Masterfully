@@ -237,6 +237,35 @@ describe("details set by hand", () => {
   });
 });
 
+describe("archiving", () => {
+  it("archives a group with its sources; unarchiving brings back only those", async () => {
+    const store = await makeStore();
+    const a = await store.createSource({ title: "A" });
+    const b = await store.createSource({ title: "B" });
+    const c = await store.createSource({ title: "C" });
+    await store.createGroup({ title: "G" });
+    for (const s of [a, b, c]) await store.addSourceToGroup("g", s.id);
+    await store.setSourceArchived(c.id, true); // archived on its own first
+
+    await store.setGroupArchived("g", true);
+    expect((await store.getGroup("g"))?.archived).toBeTruthy();
+    expect((await store.getSource(a.id))).toMatchObject({ archivedWith: "g" });
+    expect((await store.getSource(c.id))?.archivedWith).toBeUndefined();
+    const file = await fs.readFile(path.join(dir, a.path), "utf8");
+    expect(file).toMatch(/archived: \S+/);
+    expect(file).toContain("archived_with: g");
+
+    await store.setGroupArchived("g", false);
+    expect((await store.getGroup("g"))?.archived).toBeUndefined();
+    expect((await store.getSource(a.id))?.archived).toBeUndefined();
+    expect((await store.getSource(b.id))?.archived).toBeUndefined();
+    expect((await store.getSource(c.id))?.archived).toBeTruthy(); // still archived
+
+    await store.setSourceArchived(c.id, false);
+    expect(await fs.readFile(path.join(dir, c.path), "utf8")).not.toContain("archived");
+  });
+});
+
 describe("sources and groups", () => {
   it("creates readable ids", async () => {
     const store = await makeStore();

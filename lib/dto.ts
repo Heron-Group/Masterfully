@@ -71,6 +71,8 @@ export type SourceDto = {
   problem?: string;
   /** Groups this source belongs to. */
   groups: { id: string; title: string }[];
+  /** When it was archived. */
+  archived?: string;
 };
 
 export type GroupRefDto = { id: string; title: string };
@@ -87,7 +89,7 @@ export type GroupSourceDto = {
   id: string;
   note: string;
   /** Null when the referenced source file no longer exists. */
-  source: Pick<SourceDto, "id" | "title" | "authors" | "year" | "type" | "notes" | "aiSummary"> | null;
+  source: SourceDto | null;
 };
 
 export type GroupDto = {
@@ -100,6 +102,8 @@ export type GroupDto = {
   /** Sources changed or were re-summarised after the AI summary was generated. */
   summaryStale: boolean;
   sources: GroupSourceDto[];
+  /** When it was archived (with its sources). */
+  archived?: string;
   problem?: string;
 };
 
