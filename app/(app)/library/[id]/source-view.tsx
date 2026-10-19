@@ -3,7 +3,7 @@
 import { Archive, ArrowLeft, ArrowRight, BookOpen, Download, FilePlus2, FileText, Globe, Link2, Pencil, StickyNote, Trash2, Wand2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { InlineAutoText, InlineSelectText, InlineTitle, PropertyRow, useInlineSave } from "@/components/inline-fields";
 import { GroupTags } from "@/components/group-tags";
 import { ArchivedBar } from "@/components/archive";
@@ -92,6 +92,7 @@ export function SourceView({
   const tabs = readerTabs(source);
   const [notes, setNotes] = useState(source.notes);
   const [filling, setFilling] = useState<Filling>(fillOnOpen ? { status: "reading" } : null);
+  const fillStarted = useRef(false);
   const [reading, setReadingState] = useState<ReadKind | null>(
     initialRead && tabs.some((t) => t.key === initialRead) ? initialRead : null,
   );
@@ -101,7 +102,7 @@ export function SourceView({
     const url = new URL(window.location.href);
     if (kind) url.searchParams.set("read", kind);
     else url.searchParams.delete("read");
-    window.history.replaceState(window.history.state, "", url);
+    window.history.replaceState(null, "", url);
   }, []);
   const close = useCallback(() => setReading(null), [setReading]);
   // Close the panel if what it shows is removed.
@@ -124,11 +125,14 @@ export function SourceView({
   }
 
   useEffect(() => {
-    if (!fillOnOpen) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("fill");
-    window.history.replaceState(window.history.state, "", url);
+    if (!fillOnOpen || fillStarted.current) return;
+    fillStarted.current = true; // once, even when effects run twice in development
     void fillSourceDetails(source.id).then((r) => {
+      // Take ?fill=1 out of the address so a reload doesn't fill in again
+      // (once done: the navigation that brought us here has settled by then).
+      const url = new URL(window.location.href);
+      url.searchParams.delete("fill");
+      window.history.replaceState(null, "", url);
       if (r.ok && r.filled.length) {
         changed();
         setFilling({ status: "filled", result: r });

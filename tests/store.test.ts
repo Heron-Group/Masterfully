@@ -215,7 +215,7 @@ describe("index", () => {
 describe("details set by hand", () => {
   it("records what the user typed; filling in from a PDF or link doesn't count", async () => {
     const store = await makeStore();
-    const s = await store.createSource({ title: "Typed", authors: ["Doe, Jane"], setByHand: ["authors"] });
+    const s = await store.createSource({ title: "Typed", authors: ["Doe, Jane"], setByHand: ["title", "authors"] });
     expect(s.setByHand).toEqual(["title", "authors"]);
     const filled = await store.updateSource(s.id, { year: 2020, type: "book", byHand: false });
     expect(filled.setByHand).toEqual(["title", "authors"]);
@@ -223,6 +223,9 @@ describe("details set by hand", () => {
     expect(typed.setByHand).toEqual(["title", "authors", "year"]);
     expect(await fs.readFile(path.join(dir, s.path), "utf8")).toContain("set_by_hand: [ title, authors, year ]");
     expect((await (await makeStore()).getSource(s.id))?.setByHand).toEqual(["title", "authors", "year"]);
+    // A placeholder title (from a PDF's name) can be replaced.
+    expect((await store.createSource({ title: "scan 3", setByHand: [] })).setByHand).toEqual([]);
+    expect((await store.createSource({ title: "Typed" })).setByHand).toEqual(["title"]);
   });
 
   it("counts everything already filled in as the user's for older sources", async () => {

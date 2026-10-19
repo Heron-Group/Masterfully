@@ -16,7 +16,7 @@ Write in British English, in clear, plain academic prose. Use Markdown. Use "###
 
 Be faithful to the source. Do not invent claims, quotations, page numbers or references. If something is uncertain or the text is incomplete, say so briefly. Quote sparingly and only text that actually appears in the material you were given.
 
-The researcher's own notes are provided for context. Do not repeat them back; build on them, and point out where the source supports, complicates or contradicts them.`;
+When the researcher's own notes are provided, treat them as context only. Do not repeat them back.`;
 
 function describeSource(meta: SourceMeta): string {
   const lines = [
@@ -45,28 +45,23 @@ export type SourceMaterial =
   | { kind: "chunk-summaries"; summaries: string[] }
   | { kind: "metadata-only" };
 
-const SOURCE_OUTPUT = `Write the summary with these sections:
+const SOURCE_OUTPUT = `Give a comprehensive overview of what the source is about, in exactly these two sections:
 
-### Argument
-A short summary (one or two paragraphs) of what the source argues and how.
+### Abstract
+A research-style abstract of the source, as one paragraph of about 150 to 250 words, written in the third person like the abstract of a journal article: the topic and its context, the aims or questions, the approach or methods, the main arguments or findings, and the conclusions. Describe the source itself, not my notes, and don't say how it relates to anyone else's research.
 
-### Key concepts and methods
-A bulleted list of the main concepts, frameworks and methods, each with a one-line explanation.
+### What it explores
+A bulleted list of what the text explores: its main themes, questions, concepts, methods, cases and examples. Give each bullet a short bold label followed by one or two sentences. Aim for six to ten bullets, in the order they matter to the source.
 
-### Notable claims worth citing
-A bulleted list of specific claims worth citing, each with a page number in the form (p. 12) where the material shows it. Omit page numbers you cannot see; never guess them.
+Write nothing before the first heading or after the list.`;
 
-### Relevance to my research
-How this source relates to the research context: what it offers, and where it falls short or pulls in a different direction. Be specific.`;
-
-/** The text part of a source-summary request. */
-export function sourcePrompt(input: {
-  meta: SourceMeta;
-  notes: string;
-  researchContext: string;
-  material: SourceMaterial;
-}): string {
-  const { meta, notes, researchContext, material } = input;
+/**
+ * The text part of a source-summary request: an overview of the source
+ * itself (an abstract and what it explores). The research context isn't
+ * sent, as the summary doesn't relate the source to the research.
+ */
+export function sourcePrompt(input: { meta: SourceMeta; notes: string; material: SourceMaterial }): string {
+  const { meta, notes, material } = input;
   let materialText: string;
   switch (material.kind) {
     case "pdf":
@@ -82,7 +77,7 @@ export function sourcePrompt(input: {
       break;
     case "metadata-only":
       materialText =
-        "The full text is not available. Work only from the details and the researcher's notes below. Say clearly at the start that this summary is based on metadata and notes, not the source itself, and keep it short. Leave out the citable-claims section if there is nothing to cite.";
+        "The full text is not available. Work only from the details and the researcher's notes below. Begin the abstract by saying that it is based on the source's details and the researcher's notes, not the source itself, and keep both sections short.";
       break;
   }
   return `Summarise this source for my reading list.
@@ -94,8 +89,6 @@ ${describeSource(meta)}
 ${materialText}
 
 ${notesBlock(notes)}
-
-${researchContextBlock(researchContext)}
 
 ${SOURCE_OUTPUT}`;
 }
@@ -112,7 +105,7 @@ ${describeSource(input.meta)}
 ${input.text}
 </pages>
 
-Write detailed notes on this part only, for later combining: the argument it makes, key concepts and methods, and specific claims worth citing with their page numbers (p. 12) taken from the page markers. Use bullet points. Do not write an introduction or conclusion.`;
+Write detailed notes on this part only, for later combining into an overview of the whole source: what it covers, its aims or questions, its arguments or findings, and the concepts, methods, cases and examples it uses. Use bullet points. Do not write an introduction or conclusion.`;
 }
 
 export type GroupSourceInput = {

@@ -11,20 +11,22 @@ import type { AiEvent } from "@/lib/dto";
 const meta = { title: "Graphic Language", authors: ["Brody, Ann"], year: 2025, type: "article" };
 
 describe("prompts", () => {
-  it("include the details, notes and research context", () => {
-    const p = sourcePrompt({ meta, notes: "My own note", researchContext: "How does co-design…?", material: { kind: "pdf" } });
+  it("ask for an abstract and what the source explores, with the details and notes", () => {
+    const p = sourcePrompt({ meta, notes: "My own note", material: { kind: "pdf" } });
     expect(p).toContain("Title: Graphic Language");
     expect(p).toContain("Authors: Brody, Ann");
     expect(p).toContain("<my_notes>\nMy own note\n</my_notes>");
-    expect(p).toContain("How does co-design…?");
-    expect(p).toContain("### Notable claims worth citing");
+    expect(p).toContain("### Abstract");
+    expect(p).toContain("### What it explores");
+    // An overview of the source only: no relevance to the research.
+    expect(p).not.toContain("research_context");
+    expect(p).not.toMatch(/### (Argument|Relevance)/);
   });
 
-  it("say when there is no research context or notes", () => {
-    const p = sourcePrompt({ meta, notes: "", researchContext: "", material: { kind: "metadata-only" } });
+  it("say when working from the details and notes alone", () => {
+    const p = sourcePrompt({ meta, notes: "", material: { kind: "metadata-only" } });
     expect(p).toContain("(No notes yet.)");
-    expect(p).toContain("hasn't written a research context");
-    expect(p).toContain("based on metadata and notes");
+    expect(p).toContain("based on the source's details and the researcher's notes");
   });
 
   it("group prompts carry each source's group note and earlier summary", () => {

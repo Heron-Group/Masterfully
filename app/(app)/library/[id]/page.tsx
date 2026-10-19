@@ -6,11 +6,16 @@ import { ui } from "@/components/ui";
 import { sourceToDto } from "@/lib/api";
 import { requireSession } from "@/lib/auth";
 import { getContentStore } from "@/lib/content";
+import { shortTitle } from "@/lib/map/graph";
 import { SourceView } from "./source-view";
 
+/** The browser tab shows the source's title (shortened if long), not its file name. */
 export async function generateMetadata(props: PageProps<"/library/[id]">): Promise<Metadata> {
   const { id } = await props.params;
-  return { title: id };
+  const item = await getContentStore()
+    .then((store) => store.getSource(id))
+    .catch(() => null);
+  return { title: item?.title ? shortTitle(item.title, 60) : "Source" };
 }
 
 export default function SourcePage(props: PageProps<"/library/[id]">) {

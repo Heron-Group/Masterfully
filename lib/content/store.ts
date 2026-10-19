@@ -75,7 +75,11 @@ export type NewSource = {
   type?: SourceType;
   url?: string;
   notes?: string;
-  /** Details the user typed (the title always counts). */
+  /**
+   * Details the user typed. Without it, just the title counts. A title left
+   * out is a placeholder (from a PDF's file name or a link) that reading
+   * the PDF or link can replace.
+   */
   setByHand?: SourceDetailField[];
 };
 
@@ -585,7 +589,7 @@ export class ContentStore {
           updated: now,
           notes,
           aiSummary: null,
-          setByHand: SOURCE_DETAIL_FIELDS.filter((f) => f === "title" || (input.setByHand ?? []).includes(f)),
+          setByHand: input.setByHand ? SOURCE_DETAIL_FIELDS.filter((f) => input.setByHand!.includes(f)) : ["title"],
           body: replaceSection("", "Notes", notes, SOURCE_SECTIONS, { position: "start" }),
           extra: {},
         };

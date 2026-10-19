@@ -51,9 +51,8 @@ export async function* summariseSource(
     yield { type: "error", code: "not_found", message: "Source not found." };
     return;
   }
-  const { researchContext } = await store.getSettings();
   const meta = metaOf(source);
-  const base = { meta, notes: source.notes, researchContext };
+  const base = { meta, notes: source.notes };
 
   try {
     let result: RunResult;
@@ -100,7 +99,7 @@ export async function* summariseSource(
 
 async function* summarisePdf(
   data: Buffer,
-  base: { meta: SourceMeta; notes: string; researchContext: string },
+  base: { meta: SourceMeta; notes: string },
   opts: Opts,
 ): AsyncGenerator<AiEvent, RunResult> {
   const pages = await pdfPageCount(data);

@@ -48,8 +48,8 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   test.setTimeout(120_000);
   await signIn(page, "/library");
   await page.getByRole("link", { name: "Add source" }).click();
-  // The blank source page: fill in the details first, then the title creates it.
-  await expect(page.getByText("Give the source a title to save it")).toBeVisible({ timeout: 15_000 }); // first visit compiles in dev
+  // The blank source page: details typed first, then the PDF saves the source.
+  await expect(page.getByText("Give the source a title, or add a PDF or link, to save it")).toBeVisible({ timeout: 15_000 }); // first visit compiles in dev
   const authors = page.getByLabel("Authors", { exact: true });
   await authors.fill("Brody, Ann; Müller, Jo");
   await authors.press("Enter");
@@ -57,17 +57,22 @@ test("add a source with a 40 MB PDF; it displays and is committed", async ({ pag
   await year.fill("2025");
   await year.press("Enter");
   await page.getByLabel("Type", { exact: true }).selectOption("article");
+  await page.locator('input[type="file"]').setInputFiles(pdfFile(40 * 1024 * 1024, `Forty megabytes ${stamp}`));
+  // Saved with a stand-in title from the file name; the source page opens.
+  await page.waitForURL(/\/library\/brody-2025-(?!new)[^/?]+/, { timeout: 90_000 });
+  await expect(page.getByText("Reading the source's details…")).toHaveCount(0, { timeout: 20_000 });
+  // (The new-source page stays mounted, hidden, after navigating away.)
+  const title = page.getByLabel("Title", { exact: true }).filter({ visible: true });
+  await title.fill(TITLE);
+  await title.press("Enter");
+  await expect.poll(() => read(`sources/${page.url().split("/").pop()!.split("?")[0]}.md`)).toContain(`title: ${TITLE}`);
   await page.getByRole("button", { name: "Add a link" }).click();
   await page.getByLabel("Link", { exact: true }).fill("https://example.org/paper");
   await page.getByLabel("Link", { exact: true }).press("Enter");
-  await page.locator('input[type="file"]').setInputFiles(pdfFile(40 * 1024 * 1024, `Forty megabytes ${stamp}`));
+  await expect(page.getByRole("link", { name: "example.org/paper" })).toBeVisible();
   await setEditorText(page, page.getByRole("textbox", { name: "My notes" }), "First **impressions**.");
   await addToGroup(page, `E2E Group ${stamp}`);
-  const title = page.getByLabel("Title", { exact: true });
-  await title.fill(TITLE);
-  await title.press("Enter");
 
-  await page.waitForURL(/\/library\/brody-2025-e2e-graphic/, { timeout: 90_000 });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(TITLE);
   await expect(page.getByLabel("Title", { exact: true }).filter({ visible: true })).toHaveValue(TITLE);
   await expect(page.getByRole("link", { name: "example.org/paper" })).toHaveAttribute("target", "_blank");

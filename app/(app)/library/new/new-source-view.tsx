@@ -53,6 +53,7 @@ export function NewSourceView({
   const [typeChosen, setTypeChosen] = useState(false);
   /** Created with a PDF or link: the source page fills in the rest of its details. */
   const fillAfter = useRef(false);
+  const typedTitle = useRef<string | null>(null);
   const [url, setUrl] = useState("");
   const [pdf, setPdf] = useState<File | null>(null);
   const [inGroups, setInGroups] = useState<string[]>(
@@ -71,10 +72,14 @@ export function NewSourceView({
   const maybeOpen = useCallback(() => {
     if (!createdId || pending.current) return;
     const active = document.activeElement as HTMLElement | null;
+    // Wait while something is being typed; an empty field (like the title
+    // box when a PDF is dropped first) doesn't hold the page.
+    const typing = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active.value.trim() !== "" : true;
     const editing =
       !!active &&
       !!article.current?.contains(active) &&
-      active.matches("input, textarea, select, [contenteditable=true]");
+      active.matches("input, textarea, select, [contenteditable=true]") &&
+      typing;
     if (!editing) router.replace(`/library/${createdId}${fillAfter.current ? "?fill=1" : ""}`);
   }, [createdId, router]);
 
@@ -106,8 +111,20 @@ export function NewSourceView({
     void persist((id) => updateSourceProps(id, props));
   };
 
-  async function create(title: string) {
-    if (creating || !title.trim()) return;
+  /**
+   * Create the source. With `provisional`, the title is a placeholder (from
+   * the PDF's file name or the link) that the source's own details replace.
+   */
+  async function create(title: string, opts: { provisional?: boolean; pdf?: File | null; url?: string } = {}) {
+    if (!title.trim()) return;
+    // Already saved (from a PDF or link added first): a typed title is the user's.
+    if (createdId) return setProp({ title }, () => {});
+    if (creating) {
+      if (!opts.provisional) typedTitle.current = title;
+      return;
+    }
+    const file = opts.pdf !== undefined ? opts.pdf : pdf;
+    const link = opts.url ?? url;
     setCreating(true);
     setError(null);
     const form = new FormData();
@@ -123,19 +140,28 @@ export function NewSourceView({
     form.set("year", year);
     form.set("type", type);
     // What the user typed is kept; the PDF or link can fill in the rest.
-    form.set("set_by_hand", [authors.trim() && "authors", year.trim() && "year", typeChosen && "type"].filter(Boolean).join(","));
-    fillAfter.current = !!pdf || !!url.trim();
-    form.set("url", url);
+    form.set(
+      "set_by_hand",
+      [!opts.provisional && "title", authors.trim() && "authors", year.trim() && "year", typeChosen && "type"].filter(Boolean).join(","),
+    );
+    fillAfter.current = !!file || !!link.trim();
+    form.set("url", link);
     form.set("notes", notes.current);
     for (const g of inGroups) form.append("groups", g);
-    if (pdf) form.set("pdf", pdf, pdf.name);
+    if (file) form.set("pdf", file, file.name);
     try {
       const { id } = await upload<{ id: string }>(
         "/api/upload/sources",
         form,
-        pdf ? setProgress : undefined,
+        file ? setProgress : undefined,
       );
       window.dispatchEvent(new Event(CONTENT_CHANGED_EVENT));
+      // A title typed while a PDF was uploading: save it as the user's.
+      if (typedTitle.current) {
+        const typed = typedTitle.current;
+        typedTitle.current = null;
+        await updateSourceProps(id, { title: typed });
+      }
       setCreatedId(id);
     } catch (err) {
       setError(
@@ -154,7 +180,7 @@ export function NewSourceView({
         ? progress !== null && progress < 1
           ? `Uploading ${Math.round(progress * 100)}%…`
           : "Creating…"
-        : "Give the source a title to save it");
+        : "Give the source a title, or add a PDF or link, to save it");
   const dot = (
     <span aria-hidden="true" className="px-0.5 text-faint">
       ·
@@ -246,6 +272,9 @@ export function NewSourceView({
             file={pdf}
             onFile={(f) => {
               setPdf(f);
+              // No title yet: create the source now, named after the file
+              // for the moment; its details (title included) fill in next.
+              if (f && !createdId && !creating) void create(placeholderTitle(f.name), { provisional: true, pdf: f });
               if (f && createdId) {
                 const form = new FormData();
                 form.set("pdf", f, f.name);
@@ -261,7 +290,12 @@ export function NewSourceView({
           />
           <LinkDraftRow
             url={url}
-            onUrl={(u) => setProp({ url: u }, () => setUrl(u))}
+            onUrl={(u) => {
+              if (u && !createdId && !creating) {
+                setUrl(u);
+                void create(placeholderTitle(u), { provisional: true, url: u });
+              } else setProp({ url: u }, () => setUrl(u));
+            }}
           />
         </div>
       </section>
@@ -284,6 +318,20 @@ export function NewSourceView({
 
     </article>
   );
+}
+
+/** A stand-in title from a PDF's file name or a link, until the real one is read. */
+function placeholderTitle(nameOrUrl: string): string {
+  if (/^https?:\/\//i.test(nameOrUrl)) {
+    try {
+      const u = new URL(nameOrUrl);
+      const last = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() ?? "");
+      return `${u.hostname.replace(/^www\./, "")}${last ? ` – ${last.replace(/[-_]+/g, " ").replace(/\.\w+$/, "")}` : ""}`;
+    } catch {
+      return nameOrUrl;
+    }
+  }
+  return nameOrUrl.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ").trim() || "Untitled source";
 }
 
 function PdfDraftRow({

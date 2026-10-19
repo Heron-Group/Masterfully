@@ -69,7 +69,7 @@ test("a source created with a PDF fills in its details when it opens", async ({ 
   test.setTimeout(90_000);
   await as(page, "/library");
   const res = await page.request.post("/api/upload/sources", {
-    multipart: { title: `Just a title ${stamp}`, set_by_hand: "", pdf: pdf("made.pdf", { Title: "Ignored", Author: "Ann Tester and Bo Writer" }) },
+    multipart: { title: `Just a title ${stamp}`, set_by_hand: "title", pdf: pdf("made.pdf", { Title: "Ignored", Author: "Ann Tester and Bo Writer" }) },
   });
   const { id } = (await res.json()) as { id: string };
   await as(page, `/library/${id}?fill=1`);
@@ -79,4 +79,18 @@ test("a source created with a PDF fills in its details when it opens", async ({ 
   await expect.poll(() => file(id)).toContain('"Tester, Ann", "Writer, Bo"');
   expect(file(id)).toContain(`title: Just a title ${stamp}`); // the title was typed
   expect(page.url()).not.toContain("fill=1");
+});
+
+test("a PDF added before any title creates the source and fills in its title too", async ({ page }) => {
+  test.setTimeout(90_000);
+  await as(page, "/library/new");
+  // As a person would: click "Add a PDF" (the title box loses focus) and choose the file.
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.getByText("Add a PDF", { exact: true }).click()]);
+  await chooser.setFiles(pdf("scan_0042.pdf", { Title: `Material Thinking ${stamp}`, Author: "Ann Tester" }));
+  await page.waitForURL(/\/library\/(?!new)[^/?]+/, { timeout: 20_000 });
+  const note = page.getByRole("status").filter({ hasText: "Filled in" });
+  await expect(note).toHaveText(/Filled in the title, authors and year from scan.0042\.pdf\./, { timeout: 20_000 });
+  await expect(page.getByLabel("Title", { exact: true }).filter({ visible: true })).toHaveValue(`Material Thinking ${stamp}`);
+  // The browser tab shows the title, not the file name.
+  await expect(page).toHaveTitle(`Material Thinking ${stamp} · Masterfully`);
 });

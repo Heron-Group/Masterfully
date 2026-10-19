@@ -6,13 +6,18 @@ import { ui } from "@/components/ui";
 import { groupToDto } from "@/lib/api";
 import { requireSession } from "@/lib/auth";
 import { getContentStore } from "@/lib/content";
+import { shortTitle } from "@/lib/map/graph";
 import { groupColours } from "@/lib/map/server";
 import { countLinks } from "@/lib/sources/links";
 import { GroupView } from "./group-view";
 
+/** The browser tab shows the reading group's title (shortened if long), not its file name. */
 export async function generateMetadata(props: PageProps<"/groups/[id]">): Promise<Metadata> {
   const { id } = await props.params;
-  return { title: id };
+  const item = await getContentStore()
+    .then((store) => store.getGroup(id))
+    .catch(() => null);
+  return { title: item?.title ? shortTitle(item.title, 60) : "Reading group" };
 }
 
 export default function GroupPage(props: PageProps<"/groups/[id]">) {
