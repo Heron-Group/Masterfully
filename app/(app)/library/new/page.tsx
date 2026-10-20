@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { BackLink } from "@/components/back-link";
+import { FreshOnEachVisit } from "@/components/fresh-on-each-visit";
 import { ui } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { getContentStore } from "@/lib/content";
@@ -26,9 +27,11 @@ async function FormLoader({ searchParams }: { searchParams: PageProps<"/library/
   const groups = await store.listGroups();
   const preselect = (await searchParams).group;
   return (
-    <NewSourceView
-      groups={groups.map((g) => ({ id: g.id, title: g.title }))}
-      preselectedGroup={typeof preselect === "string" ? preselect : undefined}
-    />
+    <FreshOnEachVisit>
+      <NewSourceView
+        groups={groups.map((g) => ({ id: g.id, title: g.title }))}
+        preselectedGroup={typeof preselect === "string" ? preselect : undefined}
+      />
+    </FreshOnEachVisit>
   );
 }

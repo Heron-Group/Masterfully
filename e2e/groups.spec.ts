@@ -90,27 +90,25 @@ test("drag and drop reorders sources and saves the order", async ({ page }) => {
       { start, end },
     );
   }
+  // Shown newest first (Ingold 2013, Sanders 2008, Schön 1983); the first dragged to the end.
   await expect.poll(() => groupFile().match(/- id: (\S+)/g)?.map((l) => l.slice(6))).toEqual([
-    "ingold-2013-making",
     "sanders-2008-co-creation-new",
     "schon-1983-reflective-practitioner",
+    "ingold-2013-making",
   ]);
+  expect(groupFile()).toContain("order: manual");
   await page.reload();
-  await expect(page.getByRole("button", { name: /^Reorder / }).first()).toHaveAttribute("aria-label", /Making/);
+  await expect(page.getByRole("button", { name: /^Reorder / }).first()).toHaveAttribute("aria-label", /Co-creation/);
 });
 
-test("group note and overview are saved separately; sources show as in the library", async ({ page }) => {
+test("sources show as in the library with their AI overview; the overview saves", async ({ page }) => {
   await openGroup(page);
-  const note = page.getByLabel(/Group note for Co-creation/);
-  await note.fill("Defines the vocabulary");
-  await note.blur();
-  await expect(page.getByText("Saved", { exact: true }).first()).toBeVisible();
-  expect(groupFile()).toContain('note: Defines the vocabulary');
-
-  // Each source is a library row: its link opens the source, with its labels.
-  const row = page.getByRole("listitem").filter({ has: page.getByLabel(/Group note for Co-creation/) });
+  // Each source is a library row: its link opens the source, with its labels,
+  // and under it the AI overview made with its summary (or a prompt to make one).
+  const row = page.getByRole("listitem").filter({ has: page.getByRole("link", { name: /^Co-creation and the new landscapes/ }) });
   await expect(row.getByRole("link", { name: /^Co-creation and the new landscapes/ })).toHaveAttribute("href", /\/library\//);
   await expect(row.getByText("Annotated")).toBeVisible();
+  await expect(row.getByLabel(/AI overview of Co-creation/).or(row.getByText("No AI overview yet."))).toBeVisible();
 
   await page.getByRole("textbox", { name: "My overview" }).fill("Methods texts for chapter 3.");
   await expect(page.getByText("Saved", { exact: true }).first()).toBeVisible({ timeout: 10_000 });

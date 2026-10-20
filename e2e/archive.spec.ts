@@ -49,7 +49,7 @@ test("a group's sources show as in the library, still reorderable and removable"
   await expect(row(page, title("B")).getByText("Linked from 1")).toBeVisible();
   await expect(page.getByRole("button", { name: new RegExp(`^Reorder ${title("A")}`) })).toBeVisible();
   await expect(page.getByRole("button", { name: `Remove ${title("B")} from this group` })).toBeVisible();
-  await expect(page.getByLabel(`Group note for ${title("A")}`)).toHaveValue("Why A matters");
+  await expect(a.getByText("No AI overview yet.")).toBeVisible();
 });
 
 test("an archived source is hidden from the library unless asked for", async ({ page }) => {

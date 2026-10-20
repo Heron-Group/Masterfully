@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { BackLink } from "@/components/back-link";
+import { FreshOnEachVisit } from "@/components/fresh-on-each-visit";
 import { ui } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { NewNoteView } from "./new-note-view";
@@ -21,5 +22,9 @@ export default function NewNotePage() {
 
 async function SignedIn() {
   await requireSession();
-  return <NewNoteView />;
+  return (
+    <FreshOnEachVisit>
+      <NewNoteView />
+    </FreshOnEachVisit>
+  );
 }

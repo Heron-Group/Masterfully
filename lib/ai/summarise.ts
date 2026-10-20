@@ -6,7 +6,7 @@ import type { AiEvent } from "../dto";
 import { fakeAiEnabled } from "./client";
 import { fetchReadable } from "./fetch-url";
 import { MAX_DIRECT_PDF_BYTES, MAX_DIRECT_PDF_PAGES, pdfPageCount, pdfTextChunks } from "./pdf";
-import { chunkPrompt, groupPrompt, notePrompt, sourcePrompt, type SourceMaterial, type SourceMeta } from "./prompts";
+import { chunkPrompt, splitOverview, groupPrompt, notePrompt, sourcePrompt, type SourceMaterial, type SourceMeta } from "./prompts";
 import { AiError, describeError, isBadRequest, runModel, type AiBackend, type Part, type RunOptions, type RunResult } from "./providers";
 import { getAiCredentials } from "./user-config";
 
@@ -85,10 +85,12 @@ export async function* summariseSource(
     }
 
     if (!result.text) throw new AiError("The model returned an empty summary. Nothing was saved.", "api");
-    const saved = await store.setSourceAiSummary(id, { text: result.text, model: result.model });
+    // The short overview at the end is kept separately, for group pages.
+    const { summary, overview } = splitOverview(result.text);
+    const saved = await store.setSourceAiSummary(id, { text: summary, model: result.model, overview });
     yield {
       type: "done",
-      summary: saved.aiSummary ?? { text: result.text, model: result.model },
+      summary: saved.aiSummary ?? { text: summary, model: result.model },
       warning: result.truncated ? "The summary hit the length limit and may be cut short." : undefined,
     };
   } catch (err) {

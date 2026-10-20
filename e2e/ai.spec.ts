@@ -17,8 +17,14 @@ test("source summary streams in, is labelled, and changes only the AI section", 
   await expect(page.getByText(/AI-generated \d+ \w+ \d{4} · fake-model/)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/simulated summary of/i)).toBeVisible();
   const after = read("sources/ingold-2013-making.md");
-  const head = (t: string) => t.slice(0, t.indexOf("## AI summary") === -1 ? undefined : t.indexOf("## AI summary"));
-  expect(head(after).replace(/updated: .*\n/, "")).toBe(head(before).replace(/updated: .*\n/, "").trimEnd() + "\n\n");
+  const head = (t: string) =>
+    t
+      .slice(0, t.indexOf("## AI summary") === -1 ? undefined : t.indexOf("## AI summary"))
+      .replace(/updated: .*\n/, "")
+      .replace(/ai_overview: .*\n/, "");
+  expect(head(after)).toBe(head(before).trimEnd() + "\n\n");
+  // Besides the summary, only the short overview (for group pages) is saved.
+  expect(after).toMatch(/^ai_overview: .*A simulated overview/m);
 });
 
 test("group summary is marked stale after a member is re-summarised", async ({ page }) => {

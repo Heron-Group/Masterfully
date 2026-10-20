@@ -85,6 +85,7 @@ export function sourceToDto(s: Source, groups: Group[]): SourceDto {
       .filter((g) => g.sources.some((ref) => ref.id === s.id))
       .map((g) => ({ id: g.id, title: g.title })),
     archived: s.archived,
+    aiOverview: s.aiOverview,
   };
 }
 
@@ -93,7 +94,7 @@ export async function groupToDto(g: Group, store: ContentStore): Promise<GroupDt
   const sources = await Promise.all(
     g.sources.map(async (ref) => {
       const s = await store.getSource(ref.id);
-      return { id: ref.id, note: ref.note, source: s ? sourceToDto(s, groups) : null };
+      return { id: ref.id, note: ref.note, colour: ref.colour, source: s ? sourceToDto(s, groups) : null };
     }),
   );
   return {
@@ -106,6 +107,7 @@ export async function groupToDto(g: Group, store: ContentStore): Promise<GroupDt
     summaryStale: store.isGroupSummaryStale(g),
     sources,
     archived: g.archived,
+    order: g.order ?? "newest",
     problem: g.problem,
   };
 }

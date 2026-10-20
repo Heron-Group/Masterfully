@@ -17,6 +17,7 @@ import {
   NOTE_SECTIONS,
   SOURCE_SECTIONS,
 } from "./sections";
+import { formatAuthors } from "../sources/names";
 
 // Every reader here is tolerant: a missing or malformed field becomes a
 // sensible default, and a file whose frontmatter cannot be parsed at all is
@@ -88,6 +89,8 @@ export type Source = {
    * changes. Undefined for sources saved before this was recorded.
    */
   setByHand?: SourceDetailField[];
+  /** A 3–5 line AI overview, made with the AI summary (shown on group pages). */
+  aiOverview?: string;
   /** When it was archived (hidden from the library, groups and map by default). */
   archived?: string;
   /** The group whose archiving archived it; unarchiving that group brings it back. */
@@ -97,7 +100,10 @@ export type Source = {
   extra: Record<string, unknown>;
 };
 
-export type GroupSourceRef = { id: string; note: string };
+export type GroupSourceRef = { id: string; note: string; /** Highlight colour on the group page (a palette hex). */ colour?: string };
+
+/** How a group's sources are ordered: by year published, or the user's own (dragged) order. */
+export type GroupOrder = "newest" | "oldest" | "manual";
 
 export type Group = {
   id: string;
@@ -113,6 +119,8 @@ export type Group = {
   aiSummary: AiSummary | null;
   /** When it was archived, with its sources (hidden by default). */
   archived?: string;
+  /** Newest published first unless set. */
+  order?: GroupOrder;
   body: string;
   problem?: string;
   extra: Record<string, unknown>;
@@ -214,6 +222,7 @@ const SOURCE_KEYS = [
   "set_by_hand",
   "archived",
   "archived_with",
+  "ai_overview",
 ] as const;
 
 /** Lists without blanks or repeats, in order. */
@@ -244,7 +253,8 @@ export function parseSource(
     id: meta.id,
     path: meta.path,
     title: str(data.title).trim() || meta.id,
-    authors: strList(data.authors),
+    // One name format for every source, however the names were written.
+    authors: formatAuthors(strList(data.authors)),
     year: num(data.year),
     type: toSourceType(data.type),
     links,
@@ -260,6 +270,7 @@ export function parseSource(
       : undefined,
     archived: optStr(data.archived) ? isoDate(data.archived, added) : undefined,
     archivedWith: optStr(data.archived) ? optStr(data.archived_with) : undefined,
+    aiOverview: optStr(data.ai_overview)?.trim() || undefined,
     body,
     problem: error,
     extra: extraFields(data, SOURCE_KEYS),
@@ -281,6 +292,7 @@ export function serializeSource(source: Source): string {
       set_by_hand: source.setByHand,
       archived: source.archived,
       archived_with: source.archived ? source.archivedWith : undefined,
+      ai_overview: source.aiOverview,
       ...source.extra,
     },
     source.body,
@@ -298,6 +310,7 @@ const GROUP_KEYS = [
   "sources",
   "sources_changed",
   "archived",
+  "order",
 ] as const;
 
 function readGroupSources(value: unknown): GroupSourceRef[] {
@@ -310,7 +323,8 @@ function readGroupSources(value: unknown): GroupSourceRef[] {
     const id = str(r.id).trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    refs.push({ id, note: str(r.note).trim() });
+    const colour = optStr(r.colour)?.trim();
+    refs.push({ id, note: str(r.note).trim(), ...(colour && /^#[0-9a-f]{6}$/i.test(colour) ? { colour: colour.toLowerCase() } : {}) });
   }
   return refs;
 }
@@ -335,6 +349,7 @@ export function parseGroup(
     body,
     problem: error,
     archived: optStr(data.archived) ? isoDate(data.archived, created) : undefined,
+    order: (["newest", "oldest", "manual"] as const).find((o) => o === optStr(data.order)),
     extra: extraFields(data, GROUP_KEYS),
   };
 }
@@ -346,9 +361,10 @@ export function serializeGroup(group: Group): string {
       title: group.title,
       created: group.created,
       updated: group.updated,
-      sources: group.sources.map((s) => (s.note ? { id: s.id, note: s.note } : { id: s.id })),
+      sources: group.sources.map((s) => ({ id: s.id, ...(s.note ? { note: s.note } : {}), ...(s.colour ? { colour: s.colour } : {}) })),
       sources_changed: group.sourcesChanged,
       archived: group.archived,
+      order: group.order,
       ...group.extra,
     },
     group.body,

@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import type { SourceType } from "../dto";
+import { formatAuthorName } from "./names";
 
 // Reading a source's details (title, authors, year, type) from what it
 // already contains: a DOI's record, a page's scholarly metadata, or a PDF's
@@ -30,17 +31,8 @@ export function yearFrom(value: unknown): number | undefined {
   return year >= 1500 && year <= new Date().getFullYear() + 1 ? year : undefined;
 }
 
-/** "Tim Ingold" → "Ingold, Tim"; "Ingold, Tim" stays. The library's author format. */
-export function normaliseAuthor(name: string): string {
-  const n = clean(name).replace(/^by\s+/i, "");
-  if (!n || n.includes(",")) return n;
-  const parts = n.split(" ");
-  if (parts.length < 2) return n;
-  // Keep particles with the surname: "Ludwig van Beethoven" → "van Beethoven, Ludwig".
-  let i = parts.length - 1;
-  while (i > 1 && /^(van|von|de|der|den|da|di|du|la|le|del|dos|ter)$/i.test(parts[i - 1])) i--;
-  return `${parts.slice(i).join(" ")}, ${parts.slice(0, i).join(" ")}`;
-}
+/** "Tim Ingold" → "Ingold, Tim": the library's one name format (see names.ts). */
+export const normaliseAuthor = formatAuthorName;
 
 /** Several names in one field: "A; B", "A and B", "A & B". */
 export function splitAuthors(value: string): string[] {
@@ -56,7 +48,7 @@ export function detailsFromCsl(csl: Record<string, unknown>): FoundDetails {
   type Person = { family?: string; given?: string; literal?: string; name?: string };
   const people = ((csl.author as Person[] | undefined)?.length ? csl.author : csl.editor) as Person[] | undefined;
   const authors = (people ?? [])
-    .map((p) => (p.family ? (p.given ? `${clean(p.family)}, ${clean(p.given)}` : clean(p.family)) : normaliseAuthor(p.literal ?? p.name ?? "")))
+    .map((p) => (p.family ? formatAuthorName(p.given ? `${clean(p.family)}, ${clean(p.given)}` : clean(p.family)) : normaliseAuthor(p.literal ?? p.name ?? "")))
     .filter(Boolean);
   const dateOf = (k: string) => (csl[k] as { "date-parts"?: unknown[][] } | undefined)?.["date-parts"]?.[0]?.[0];
   const year = yearFrom(dateOf("issued") ?? dateOf("published-print") ?? dateOf("published-online") ?? dateOf("created"));

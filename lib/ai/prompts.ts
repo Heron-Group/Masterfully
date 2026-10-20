@@ -45,15 +45,36 @@ export type SourceMaterial =
   | { kind: "chunk-summaries"; summaries: string[] }
   | { kind: "metadata-only" };
 
-const SOURCE_OUTPUT = `Give a comprehensive overview of what the source is about, in exactly these two sections:
+/** The heading of the short overview at the end of a source summary; split off and kept separately (see splitOverview). */
+export const OVERVIEW_HEADING = "### In brief";
+
+const SOURCE_OUTPUT = `Give a comprehensive overview of what the source is about, in exactly these sections:
 
 ### Abstract
-A research-style abstract of the source, as one paragraph of about 150 to 250 words, written in the third person like the abstract of a journal article: the topic and its context, the aims or questions, the approach or methods, the main arguments or findings, and the conclusions. Describe the source itself, not my notes, and don't say how it relates to anyone else's research.
+If the source contains its own abstract (often headed "Abstract" or "Summary", near the start), reproduce it exactly as written: word for word, without shortening, correcting or rewording it, and keep its paragraph breaks. Put this line in italics directly above it: *The source's own abstract.*
+If it has no abstract, write one in the style of a journal article's abstract: one paragraph of about 150 to 250 words in the third person, covering the topic and its context, the aims or questions, the approach or methods, the main arguments or findings, and the conclusions. Put this line in italics directly above it: *No abstract in the source; written for this summary.*
 
 ### What it explores
 A bulleted list of what the text explores: its main themes, questions, concepts, methods, cases and examples. Give each bullet a short bold label followed by one or two sentences. Aim for six to ten bullets, in the order they matter to the source.
 
-Write nothing before the first heading or after the list.`;
+### Key findings and citable claims
+A bulleted list of the source's key findings and specific claims worth citing, each in one or two sentences. Add the page number in the form (p. 12) wherever the material shows it; leave it out where it doesn't, and never guess one. Quote only text that appears in the material.
+
+${OVERVIEW_HEADING}
+Three to five lines (about 50 to 90 words) of plain prose saying what the source is about, for a list of sources. No heading other than this one, no bullets.
+
+Describe the source itself, not my notes, and don't say how it relates to anyone else's research. Write nothing before the first heading.`;
+
+/**
+ * A source summary with its short overview taken off the end: the summary
+ * is saved as the AI summary, the overview separately (for group pages).
+ */
+export function splitOverview(text: string): { summary: string; overview?: string } {
+  const at = text.search(/^###\s*In brief\s*$/im);
+  if (at < 0) return { summary: text.trim() };
+  const overview = text.slice(at).replace(/^###\s*In brief\s*$/im, "").trim();
+  return { summary: text.slice(0, at).trim(), overview: overview || undefined };
+}
 
 /**
  * The text part of a source-summary request: an overview of the source
@@ -71,13 +92,13 @@ export function sourcePrompt(input: { meta: SourceMeta; notes: string; material:
       materialText = `The readable text of the web page${material.pageTitle ? ` "${material.pageTitle}"` : ""}:\n<page_text>\n${material.text}\n</page_text>`;
       break;
     case "chunk-summaries":
-      materialText = `The PDF was too large to read in one go, so it was summarised in ${material.summaries.length} parts. Combine these into one summary. Keep page numbers that the part summaries give.\n${material.summaries
+      materialText = `The PDF was too large to read in one go, so it was summarised in ${material.summaries.length} parts. Combine these into one summary. Keep page numbers that the part summaries give. If a part gives the "Source abstract (verbatim)", that is the source's own abstract: use it exactly as given.\n${material.summaries
         .map((s, i) => `<part number="${i + 1}">\n${s}\n</part>`)
         .join("\n")}`;
       break;
     case "metadata-only":
       materialText =
-        "The full text is not available. Work only from the details and the researcher's notes below. Begin the abstract by saying that it is based on the source's details and the researcher's notes, not the source itself, and keep both sections short.";
+        "The full text is not available. Work only from the details and the researcher's notes below. There is no abstract to reproduce: begin the abstract by saying that it is based on the source's details and the researcher's notes, not the source itself. Keep every section short, and leave out the findings section if there is nothing to list.";
       break;
   }
   return `Summarise this source for my reading list.
@@ -105,7 +126,9 @@ ${describeSource(input.meta)}
 ${input.text}
 </pages>
 
-Write detailed notes on this part only, for later combining into an overview of the whole source: what it covers, its aims or questions, its arguments or findings, and the concepts, methods, cases and examples it uses. Use bullet points. Do not write an introduction or conclusion.`;
+Write detailed notes on this part only, for later combining into an overview of the whole source: what it covers, its aims or questions, its arguments and findings, specific claims worth citing with their page numbers (p. 12) taken from the page markers, and the concepts, methods, cases and examples it uses. Use bullet points. Do not write an introduction or conclusion.
+
+If this part contains the source's own abstract, first copy it exactly, word for word, under the line "Source abstract (verbatim):".`;
 }
 
 export type GroupSourceInput = {

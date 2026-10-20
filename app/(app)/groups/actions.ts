@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { ContentError, getContentStore } from "@/lib/content";
 import type { GroupSourceRef } from "@/lib/content";
+import type { GroupOrder } from "@/lib/content/schemas";
 import { isPaletteColour } from "@/lib/map/colours";
 import { updateMapLayout } from "@/lib/map/layout";
 
@@ -42,8 +43,21 @@ export async function saveGroupOverview(id: string, overview: string): Promise<A
 }
 
 /** Save a new order (drag and drop). */
+/** Save a dragged order; the group then keeps the user's own order. */
 export async function reorderGroupSources(id: string, refs: GroupSourceRef[]): Promise<ActionResult> {
-  return run(() => getContentStore().then((s) => s.setGroupSources(id, refs)), { refresh: false });
+  return run(() => getContentStore().then((s) => s.setGroupSources(id, refs, { order: "manual" })));
+}
+
+/** Newest published first, oldest first, or the user's own order. */
+export async function setGroupOrder(id: string, order: GroupOrder): Promise<ActionResult> {
+  if (!["newest", "oldest", "manual"].includes(order)) return { ok: false, error: "Unknown order." };
+  return run(() => getContentStore().then((s) => s.setGroupOrder(id, order)));
+}
+
+/** A source's highlight colour in this group (one of the palette's, or none). */
+export async function setGroupSourceColour(id: string, sourceId: string, colour: string | null): Promise<ActionResult> {
+  if (colour !== null && !isPaletteColour(colour)) return { ok: false, error: "Choose one of the palette's colours." };
+  return run(() => getContentStore().then((s) => s.setGroupSourceColour(id, sourceId, colour)));
 }
 
 export async function saveGroupSourceNote(id: string, sourceId: string, note: string): Promise<ActionResult> {

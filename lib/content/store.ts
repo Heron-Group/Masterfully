@@ -33,6 +33,7 @@ import {
   type Settings,
   type Source,
   withPrimary,
+  type GroupOrder,
   type SourceDetailField,
   type SourceType,
 } from "./schemas";
@@ -43,6 +44,7 @@ import {
   setAiSummary,
   SOURCE_SECTIONS,
 } from "./sections";
+import { formatAuthors } from "../sources/names";
 import { ContentLock } from "./lock";
 
 export type StoreOptions = {
@@ -561,7 +563,7 @@ export class ContentStore {
     const title = input.title.trim();
     if (!title) throw new ContentError("A source needs a title", 400);
     return this.write(async (tx) => {
-        const authors = (input.authors ?? []).map((a) => a.trim()).filter(Boolean);
+        const authors = formatAuthors(input.authors ?? []);
         const id = uniqueId(
           sourceSlug({ title, authors, year: input.year }),
           (c) => this.sources.has(c) || RESERVED_IDS.has(c) || tx.has(`${DIRS.sources}/${c}.md`),
@@ -619,7 +621,7 @@ export class ContentStore {
       const next: Source = {
         ...source,
         title: patch.title?.trim() || source.title,
-        authors: patch.authors ? patch.authors.map((a) => a.trim()).filter(Boolean) : source.authors,
+        authors: patch.authors ? formatAuthors(patch.authors) : source.authors,
         year: "year" in patch ? (patch.year ?? undefined) : source.year,
         type: patch.type ?? source.type,
         updated: this.stamp(),
@@ -709,12 +711,13 @@ export class ContentStore {
   }
 
   /** Rewrite only the `## AI summary` section. */
-  async setSourceAiSummary(id: string, summary: { text: string; model: string }): Promise<Source> {
+  /** Save an AI summary, and the short overview made with it (shown on group pages). */
+  async setSourceAiSummary(id: string, summary: { text: string; model: string; overview?: string }): Promise<Source> {
     return this.write(async (tx) => {
       const source = this.requireSource(id);
       const generated = this.stamp();
-      const body = setAiSummary(source.body, { ...summary, generated }, SOURCE_SECTIONS);
-      const next = { ...source, body, updated: generated };
+      const body = setAiSummary(source.body, { text: summary.text, model: summary.model, generated }, SOURCE_SECTIONS);
+      const next = { ...source, body, aiOverview: summary.overview?.trim() || source.aiOverview, updated: generated };
       await tx.writeText(source.path, serializeSource(next));
       return next;
     });
@@ -829,10 +832,12 @@ export class ContentStore {
    * Replace the group's ordered source list (used for add, remove, reorder
    * and editing group-specific notes). Unknown source ids are rejected.
    */
-  async setGroupSources(id: string, refs: GroupSourceRef[]): Promise<Group> {
-    return this.write((tx) =>
-      this.applyGroupSources(tx, this.requireGroup(id), refs),
-    );
+  /** Replace the group's sources (in this order); `order` also changes how they're ordered on the page. */
+  async setGroupSources(id: string, refs: GroupSourceRef[], opts: { order?: GroupOrder } = {}): Promise<Group> {
+    return this.write((tx) => {
+      const group = this.requireGroup(id);
+      return this.applyGroupSources(tx, opts.order ? { ...group, order: opts.order } : group, refs);
+    });
   }
 
   async addSourceToGroup(groupId: string, sourceId: string, note = ""): Promise<Group> {
@@ -866,7 +871,8 @@ export class ContentStore {
           throw new ContentError(`Unknown source: ${ref.id}`, 400);
         }
         seen.add(ref.id);
-        clean.push({ id: ref.id, note: (ref.note ?? "").trim() });
+        const colour = ref.colour ?? group.sources.find((s) => s.id === ref.id)?.colour;
+        clean.push({ id: ref.id, note: (ref.note ?? "").trim(), ...(colour ? { colour } : {}) });
       }
       const membershipChanged =
         clean.length !== group.sources.length ||
@@ -876,6 +882,23 @@ export class ContentStore {
         sources: clean,
         sourcesChanged: membershipChanged ? this.stamp() : group.sourcesChanged,
       });
+  }
+
+  /** Set (or clear, with null) a source's highlight colour in one group. */
+  async setGroupSourceColour(groupId: string, sourceId: string, colour: string | null): Promise<Group> {
+    return this.write(async (tx) => {
+      const group = this.requireGroup(groupId);
+      if (!group.sources.some((s) => s.id === sourceId)) throw new ContentError("That source isn't in this group", 404);
+      return this.writeGroup(tx, {
+        ...group,
+        sources: group.sources.map((s) => (s.id !== sourceId ? s : colour ? { ...s, colour } : { id: s.id, note: s.note })),
+      });
+    });
+  }
+
+  /** How the group's sources are ordered on its page. */
+  async setGroupOrder(groupId: string, order: GroupOrder): Promise<Group> {
+    return this.write(async (tx) => this.writeGroup(tx, { ...this.requireGroup(groupId), order }));
   }
 
   /** Change the group-specific note for one source. */

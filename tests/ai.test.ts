@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fetchReadable, isPrivateAddress } from "@/lib/ai/fetch-url";
-import { groupPrompt, sourcePrompt } from "@/lib/ai/prompts";
+import { groupPrompt, sourcePrompt, splitOverview } from "@/lib/ai/prompts";
 import { summariseGroup, summariseNote, summariseSource } from "@/lib/ai/summarise";
 import { ContentStore } from "@/lib/content/store";
 import type { AiEvent } from "@/lib/dto";
@@ -17,10 +17,18 @@ describe("prompts", () => {
     expect(p).toContain("Authors: Brody, Ann");
     expect(p).toContain("<my_notes>\nMy own note\n</my_notes>");
     expect(p).toContain("### Abstract");
+    expect(p).toContain("reproduce it exactly as written");
     expect(p).toContain("### What it explores");
+    expect(p).toContain("### Key findings and citable claims");
+    expect(p).toContain("### In brief");
     // An overview of the source only: no relevance to the research.
     expect(p).not.toContain("research_context");
     expect(p).not.toMatch(/### (Argument|Relevance)/);
+  });
+
+  it("take the short overview off the end of a summary", () => {
+    expect(splitOverview("### Abstract\n\nText.\n\n### In brief\n\nA few lines.\n")).toEqual({ summary: "### Abstract\n\nText.", overview: "A few lines." });
+    expect(splitOverview("### Abstract\n\nOnly this.")).toEqual({ summary: "### Abstract\n\nOnly this." });
   });
 
   it("say when working from the details and notes alone", () => {

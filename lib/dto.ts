@@ -73,6 +73,8 @@ export type SourceDto = {
   groups: { id: string; title: string }[];
   /** When it was archived. */
   archived?: string;
+  /** Short AI overview (made with the AI summary), shown on group pages. */
+  aiOverview?: string;
 };
 
 export type GroupRefDto = { id: string; title: string };
@@ -88,6 +90,8 @@ export function formatAuthors(authors: string[]): string {
 export type GroupSourceDto = {
   id: string;
   note: string;
+  /** Highlight colour in this group. */
+  colour?: string;
   /** Null when the referenced source file no longer exists. */
   source: SourceDto | null;
 };
@@ -104,6 +108,8 @@ export type GroupDto = {
   sources: GroupSourceDto[];
   /** When it was archived (with its sources). */
   archived?: string;
+  /** How sources are ordered: newest or oldest published first, or the user's own order. */
+  order: "newest" | "oldest" | "manual";
   problem?: string;
 };
 

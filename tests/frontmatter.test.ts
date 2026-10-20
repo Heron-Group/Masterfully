@@ -196,7 +196,7 @@ Generated text, replaced on regeneration.
     expect(s.title).toBe("x");
     expect(s.year).toBeUndefined();
     expect(s.type).toBe("other");
-    expect(s.authors).toEqual(["Single Author"]);
+    expect(s.authors).toEqual(["Author, Single"]); // in the library's one name format
     expect(s.notes).toBe("Loose notes");
     expect(s.aiSummary).toBeNull();
   });
